@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .glass-card {
+    background: rgba(18, 12, 16, 0.78);
+    backdrop-filter: blur(28px) saturate(190%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.65), 0 0 30px -10px rgba(220, 38, 38, 0.12), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+    transition: border-color 0.5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-card-interactive {
+    background: rgba(18, 12, 16, 0.78);
+    backdrop-filter: blur(28px) saturate(190%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.65), 0 0 30px -10px rgba(220, 38, 38, 0.12), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-card-interactive:hover {
+    background: rgba(26, 16, 22, 0.85);
+    border-color: rgba(244, 63, 94, 0.35);
+    box-shadow: 0 24px 60px -10px rgba(225, 29, 72, 0.2), inset 0 1px 1px 0 rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+  }
+
+  .glass-pill {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .glass-input {
+    background: rgba(14, 8, 12, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.4);
+    color: #ffffff;
+    transition: all 0.3s ease;
+  }
+
+  .glass-input:focus {
+    border-color: rgba(244, 63, 94, 0.6);
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.18), inset 0 2px 4px 0 rgba(0, 0, 0, 0.4);
+    outline: none;
+  }
+
+  .glass-header {
+    background: rgba(16, 10, 14, 0.75);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 24px 60px -15px rgba(0, 0, 0, 0.7), 0 0 40px -10px rgba(225, 29, 72, 0.18), inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
+    transition: border-color 0.5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .red-glow {
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.35);
+  }
+
+  .red-gradient-text {
+    background: linear-gradient(135deg, #ffffff 0%, #f43f5e 50%, #dc2626 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Dynamic User Role Themes */
+  .theme-role-officer .role-border {
+    border-color: rgba(6, 182, 212, 0.35);
+  }
+  .theme-role-officer .role-glow {
+    box-shadow: 0 0 25px rgba(6, 182, 212, 0.2);
+  }
+  .theme-role-officer .role-accent-text {
+    color: #67e8f9;
+  }
+  .theme-role-officer .role-badge-bg {
+    background: rgba(6, 182, 212, 0.15);
+    border-color: rgba(6, 182, 212, 0.4);
+    color: #67e8f9;
+  }
+
+  .theme-role-approver .role-border {
+    border-color: rgba(245, 158, 11, 0.45);
+  }
+  .theme-role-approver .role-glow {
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.25);
+  }
+  .theme-role-approver .role-accent-text {
+    color: #fcd34d;
+  }
+  .theme-role-approver .role-badge-bg {
+    background: rgba(245, 158, 11, 0.16);
+    border-color: rgba(245, 158, 11, 0.5);
+    color: #fcd34d;
+  }
+
+  .theme-role-viewer .role-border {
+    border-color: rgba(16, 185, 129, 0.35);
+  }
+  .theme-role-viewer .role-glow {
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.2);
+  }
+  .theme-role-viewer .role-accent-text {
+    color: #6ee7b7;
+  }
+  .theme-role-viewer .role-badge-bg {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #6ee7b7;
+  }
+
+  /* Red & White Waving Background for Procurement Governance & Intelligence */
+  .red-white-wave-bg {
+    background: linear-gradient(
+      115deg,
+      #dc2626 0%,
+      #ef4444 15%,
+      #ffffff 30%,
+      #fee2e2 40%,
+      #dc2626 55%,
+      #ffffff 70%,
+      #ef4444 85%,
+      #991b1b 100%
+    );
+    background-size: 250% 250%;
+    animation: waveFlow 4s ease-in-out infinite;
+  }
+
+  /* Chatbot Hover Animation & Radiant Red Glow */
+  .chatbot-container-hover {
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .chatbot-container-hover:hover {
+    border-color: rgba(239, 68, 68, 0.65) !important;
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 35px 2px rgba(239, 68, 68, 0.35) !important;
+    transform: translateY(-3px) scale(1.008);
+  }
+
+  .chatbot-button-pulse {
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .chatbot-button-pulse:hover {
+    transform: translateY(-4px) scale(1.06);
+    box-shadow: 0 15px 35px -5px rgba(220, 38, 38, 0.6), 0 0 25px 5px rgba(239, 68, 68, 0.45);
+    border-color: rgba(248, 113, 113, 0.9);
+  }
+
+  .chatbot-chip-hover {
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .chatbot-chip-hover:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+  }
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+@keyframes waveFlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(9, 9, 11, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 68, 68, 0.5);
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+@keyframes logoMatrixPulse {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+    filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.8));
+  }
+}
+
+@keyframes logoBeamShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-logo-matrix-1 {
+  animation: logoMatrixPulse 2.4s ease-in-out infinite 0s;
+}
+
+.animate-logo-matrix-2 {
+  animation: logoMatrixPulse 2.4s ease-in-out infinite 0.3s;
+}
+
+.animate-logo-matrix-3 {
+  animation: logoMatrixPulse 2.4s ease-in-out infinite 0.6s;
+}
+
+.animate-logo-matrix-4 {
+  animation: logoMatrixPulse 2.4s ease-in-out infinite 0.9s;
+}
+
+.animate-logo-matrix-5 {
+  animation: logoMatrixPulse 2.4s ease-in-out infinite 1.2s;
+}
+
+.lantern-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    #ff3344 0%,
+    #fb7185 20%,
+    #ffffff 40%,
+    #fda4af 60%,
+    #e11d48 80%,
+    #ff3344 100%
+  );
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: logoBeamShimmer 3.5s linear infinite;
+  display: inline-block;
+}
+

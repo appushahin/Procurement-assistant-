@@ -1,0 +1,6 @@
+{
+  "name": "Vendor Comparison and Procurement Assistant",
+  "description": "Interactive vendor comparison, weighted criteria scoring, quotation AI extraction, and decision approval tool for procurement teams.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
