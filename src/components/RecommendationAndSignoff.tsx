@@ -1,6 +1,33 @@
-import React from "react";
-import { Sparkles, RefreshCw, CheckCircle2, RotateCcw, AlertOctagon, UserCheck, ShieldAlert, ShieldCheck, Lightbulb, FileSpreadsheet, Printer, XCircle, Info, FileText } from "lucide-react";
-import { RecommendationResult, SignOffRecord, UserRole } from "../types";
+import React, { useState } from "react";
+import {
+  Sparkles,
+  RefreshCw,
+  CheckCircle2,
+  RotateCcw,
+  AlertOctagon,
+  UserCheck,
+  ShieldAlert,
+  ShieldCheck,
+  Lightbulb,
+  FileSpreadsheet,
+  Printer,
+  XCircle,
+  Info,
+  FileText,
+  Lock,
+  Unlock,
+  Building2,
+  DollarSign,
+  Briefcase,
+} from "lucide-react";
+import {
+  RecommendationResult,
+  SignOffRecord,
+  UserRole,
+  MultiTierSignoff,
+  VendorBinaryGateMap,
+  VendorScores,
+} from "../types";
 import { VENDOR_NAMES } from "../data";
 import { LanternLogo } from "./LanternLogo";
 import { StatusBadge } from "./StatusBadge";
@@ -11,6 +38,9 @@ interface Props {
   recommendation: RecommendationResult | null;
   error: string | null;
   signoff: SignOffRecord | null;
+  multiTierSignoff?: MultiTierSignoff;
+  onApproveTier?: (tier: "tier1Tech" | "tier2Finance" | "tier3Executive", signee: string, comments?: string) => void;
+  onResetMultiTier?: () => void;
   onApprove: () => void;
   onOverride: (vendorKey: string, reason: string, user: string) => void;
   onResetSignoff: () => void;
@@ -19,6 +49,8 @@ interface Props {
   onExportWord?: () => void;
   onExportPPT?: () => void;
   userRole?: UserRole;
+  binaryGates?: VendorBinaryGateMap;
+  scores?: VendorScores;
 }
 
 export function RecommendationAndSignoff({
@@ -27,6 +59,9 @@ export function RecommendationAndSignoff({
   recommendation,
   error,
   signoff,
+  multiTierSignoff,
+  onApproveTier,
+  onResetMultiTier,
   onApprove,
   onOverride,
   onResetSignoff,
@@ -35,14 +70,27 @@ export function RecommendationAndSignoff({
   onExportWord,
   onExportPPT,
   userRole = "Procurement Officer",
+  binaryGates = {},
+  scores = {},
 }: Props) {
-  const [showOverrideModal, setShowOverrideModal] = React.useState(false);
-  const [selectedOverrideVendor, setSelectedOverrideVendor] = React.useState("");
-  const [overrideReason, setOverrideReason] = React.useState("");
-  const [userName, setUserName] = React.useState("Senior Procurement Lead");
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [selectedOverrideVendor, setSelectedOverrideVendor] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [userName, setUserName] = useState("Senior Procurement Officer");
+  const [activeTierComment, setActiveTierComment] = useState<string>("");
 
   const isReasonValid = overrideReason.trim().length >= 5;
   const isClientViewer = userRole === "Client Viewer";
+
+  const targetVendorKey =
+    signoff?.vendor ||
+    multiTierSignoff?.awardedVendorKey ||
+    recommendation?.recommendedVendor ||
+    "meridian";
+
+  const isTargetVendorGatedOut =
+    binaryGates[targetVendorKey]?.failoverVerified === false ||
+    binaryGates[targetVendorKey]?.complianceCertified === false;
 
   const handleConfirmOverride = () => {
     if (!selectedOverrideVendor || !isReasonValid) return;
@@ -52,21 +100,21 @@ export function RecommendationAndSignoff({
 
   return (
     <div className="glass-card p-6 rounded-2xl mb-8 border border-white/10 shadow-2xl relative overflow-hidden">
-      {/* Header & Primary Action Button (Blue/Teal Accent) */}
+      {/* Header & Primary Action Button */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/10">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
             <span className="font-mono text-[11px] uppercase tracking-wider text-cyan-300 font-semibold bg-cyan-950/60 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
-              Step 5: Executive Synthesis & Governance
+              Executive Synthesis & Multi-Tier Governance
             </span>
             <LanternLogo size="sm" showTagline={false} animated={true} className="hidden sm:inline-flex ml-2 opacity-90" />
           </div>
           <h3 className="font-sans text-xl font-bold text-white tracking-tight mt-0.5">
-            AI Recommendation & Structured Reasoning
+            AI Recommendation & Multi-Tier Sign-Off Matrix
           </h3>
           <p className="text-xs text-zinc-400 mt-1">
-            Synthesize key decision factors, analyze excluded vendor reasons, and log formal approval or justified overrides.
+            Synthesize key decision factors, analyze excluded vendor reasons, and log formal 3-tier approval or justified overrides.
           </p>
         </div>
 
@@ -98,13 +146,34 @@ export function RecommendationAndSignoff({
         </div>
       )}
 
+      {/* Mandatory Gate Blocker Alert if winning candidate has failed gates */}
+      {isTargetVendorGatedOut && (
+        <div className="mb-6 p-4 rounded-xl bg-red-950/40 border-2 border-red-500/50 shadow-lg">
+          <div className="flex items-start gap-3">
+            <AlertOctagon size={20} className="text-red-400 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-sans font-bold text-red-200 text-sm">
+                Mandatory Gate Disqualification: {VENDOR_NAMES[targetVendorKey]}
+              </h4>
+              <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                This vendor failed the <strong>Strict Binary Gatekeeper</strong> check (Failover: NO / Compliance: NO). Standard PO generation is blocked. To proceed with this vendor, an Executive Override with formal risk rationale must be submitted.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Structured Recommendation Output */}
       {recommendation ? (
         <div className="glass-card-interactive border border-white/10 rounded-2xl p-5 mb-6 shadow-2xl space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <StatusBadge status="low" label="Recommended Choice" size="sm" />
+                <StatusBadge
+                  status={isTargetVendorGatedOut ? "high" : "low"}
+                  label={isTargetVendorGatedOut ? "Gate Blocked" : "Recommended Choice"}
+                  size="sm"
+                />
                 <span className="font-mono text-xs font-bold text-white">
                   {VENDOR_NAMES[recommendation.recommendedVendor] || recommendation.recommendedVendor}
                 </span>
@@ -119,13 +188,12 @@ export function RecommendationAndSignoff({
             {recommendation.narrative}
           </p>
 
-          {/* Section 6 requirement: drivingCriteria and excludedVendors */}
           <div className="grid md:grid-cols-2 gap-4 pt-1">
             {/* Driving Decision Criteria */}
             <div className="bg-zinc-950/80 border border-cyan-500/30 rounded-xl p-4 shadow-inner">
               <div className="flex items-center gap-2 mb-2.5 text-xs font-mono font-bold text-cyan-300">
                 <CheckCircle2 size={15} className="text-cyan-400" />
-                <span>Primary Decision Drivers (2-3 Key Criteria)</span>
+                <span>Primary Decision Drivers</span>
               </div>
               <ul className="space-y-2 text-xs text-zinc-200">
                 {recommendation.drivingCriteria && recommendation.drivingCriteria.length > 0 ? (
@@ -212,41 +280,197 @@ export function RecommendationAndSignoff({
         </div>
       )}
 
-      {/* Human Sign-Off / Approval Control */}
+      {/* MULTI-TIER SEQUENTIAL SIGN-OFF HIERARCHY */}
+      {multiTierSignoff && onApproveTier && (
+        <div className="pt-4 border-t border-white/10 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Building2 size={18} className="text-cyan-400" />
+                <h4 className="font-sans font-bold text-base text-white">
+                  3-Tier Sequential Sign-Off Governance Hierarchy
+                </h4>
+              </div>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Requires sequential verification: Technical Lead &rarr; Finance Director &rarr; VP of Procurement.
+              </p>
+            </div>
+
+            {onResetMultiTier && !isClientViewer && (
+              <button
+                onClick={onResetMultiTier}
+                className="text-xs font-mono text-zinc-400 hover:text-white underline cursor-pointer"
+              >
+                Reset Approval Pipeline
+              </button>
+            )}
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-4">
+            {/* Tier 1: Technical Lead */}
+            <div className={`p-4 rounded-xl border ${
+              multiTierSignoff.tier1Tech.status === "approved"
+                ? "bg-emerald-950/30 border-emerald-500/50"
+                : "bg-zinc-950/70 border-white/10"
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-[11px] font-mono uppercase font-bold text-cyan-300">
+                  Tier 1: Technical Lead
+                </span>
+                {multiTierSignoff.tier1Tech.status === "approved" ? (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
+                    APPROVED
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
+                    PENDING
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-300 mb-3">
+                Certifies failover clustering, 24/7 continuous availability, and technical spec compliance.
+              </p>
+              {multiTierSignoff.tier1Tech.status === "approved" ? (
+                <div className="text-[11px] font-mono text-zinc-400 bg-zinc-900/80 p-2.5 rounded-lg border border-white/5">
+                  <div>Signed by: <strong className="text-white">{multiTierSignoff.tier1Tech.signeeName}</strong></div>
+                  <div className="text-[10px] text-zinc-500">{multiTierSignoff.tier1Tech.timestamp}</div>
+                </div>
+              ) : (
+                !isClientViewer && (
+                  <button
+                    onClick={() => onApproveTier("tier1Tech", "Lead Systems Architect")}
+                    className="w-full py-2 rounded-xl text-xs font-mono font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-all shadow-md shadow-cyan-600/30 cursor-pointer"
+                  >
+                    Sign Technical Approval
+                  </button>
+                )
+              )}
+            </div>
+
+            {/* Tier 2: Finance Director */}
+            <div className={`p-4 rounded-xl border ${
+              multiTierSignoff.tier2Finance.status === "approved"
+                ? "bg-emerald-950/30 border-emerald-500/50"
+                : multiTierSignoff.tier1Tech.status !== "approved"
+                ? "bg-zinc-950/40 border-white/5 opacity-60"
+                : "bg-zinc-950/70 border-white/10"
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-[11px] font-mono uppercase font-bold text-amber-300">
+                  Tier 2: Finance Director
+                </span>
+                {multiTierSignoff.tier2Finance.status === "approved" ? (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
+                    APPROVED
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
+                    PENDING
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-300 mb-3">
+                Validates CAPEX allocation, 5-Year TCO budget commitment, and payment milestones.
+              </p>
+              {multiTierSignoff.tier2Finance.status === "approved" ? (
+                <div className="text-[11px] font-mono text-zinc-400 bg-zinc-900/80 p-2.5 rounded-lg border border-white/5">
+                  <div>Signed by: <strong className="text-white">{multiTierSignoff.tier2Finance.signeeName}</strong></div>
+                  <div className="text-[10px] text-zinc-500">{multiTierSignoff.tier2Finance.timestamp}</div>
+                </div>
+              ) : (
+                !isClientViewer && (
+                  <button
+                    onClick={() => onApproveTier("tier2Finance", "Director of Financial Planning")}
+                    disabled={multiTierSignoff.tier1Tech.status !== "approved"}
+                    className="w-full py-2 rounded-xl text-xs font-mono font-bold bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all shadow-md shadow-amber-600/30 cursor-pointer"
+                  >
+                    Sign Finance Approval
+                  </button>
+                )
+              )}
+            </div>
+
+            {/* Tier 3: VP of Procurement */}
+            <div className={`p-4 rounded-xl border ${
+              multiTierSignoff.tier3Executive.status === "approved"
+                ? "bg-emerald-950/30 border-emerald-500/50"
+                : multiTierSignoff.tier2Finance.status !== "approved"
+                ? "bg-zinc-950/40 border-white/5 opacity-60"
+                : "bg-zinc-950/70 border-white/10"
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-[11px] font-mono uppercase font-bold text-purple-300">
+                  Tier 3: VP of Procurement
+                </span>
+                {multiTierSignoff.tier3Executive.status === "approved" ? (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
+                    AWARDED
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
+                    PENDING
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-300 mb-3">
+                Authorizes binding Purchase Order contract issuance and vendor onboarding.
+              </p>
+              {multiTierSignoff.tier3Executive.status === "approved" ? (
+                <div className="text-[11px] font-mono text-zinc-400 bg-zinc-900/80 p-2.5 rounded-lg border border-white/5">
+                  <div>Signed by: <strong className="text-white">{multiTierSignoff.tier3Executive.signeeName}</strong></div>
+                  <div className="text-[10px] text-zinc-500">{multiTierSignoff.tier3Executive.timestamp}</div>
+                </div>
+              ) : (
+                !isClientViewer && (
+                  <button
+                    onClick={() => onApproveTier("tier3Executive", "VP of Strategic Sourcing")}
+                    disabled={multiTierSignoff.tier2Finance.status !== "approved"}
+                    className="w-full py-2 rounded-xl text-xs font-mono font-bold bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all shadow-md shadow-purple-600/30 cursor-pointer"
+                  >
+                    Execute Final Award PO
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Human Sign-Off / Approval Control Fallback / Override Options */}
       <div className="pt-4 border-t border-white/10">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <UserCheck size={18} className="text-cyan-400" />
               <h4 className="font-sans font-bold text-base text-white">
-                Human Governance & Approval Status
+                Human Governance & Override Authorization
               </h4>
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Formal procurement decisions require explicit human authorization before purchase order issuance.
+              Override AI selection or log an exception with mandatory justification.
             </p>
           </div>
 
           {!signoff ? (
             !isClientViewer ? (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
                 <button
                   onClick={onApprove}
                   disabled={!recommendation}
-                  className={`font-sans flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-md ${
+                  className={`font-sans flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all shadow-md ${
                     recommendation
                       ? "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-600/30"
                       : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
                   }`}
                 >
                   <CheckCircle2 size={16} />
-                  <span>Approve Recommendation</span>
+                  <span>Quick Approve</span>
                 </button>
 
                 <button
                   onClick={() => setShowOverrideModal(true)}
                   disabled={!recommendation}
-                  className={`font-sans flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-white/10 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 transition-all ${
+                  className={`font-sans flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold border border-white/10 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 transition-all ${
                     recommendation ? "cursor-pointer" : "opacity-50 cursor-not-allowed"
                   }`}
                 >
@@ -358,7 +582,7 @@ export function RecommendationAndSignoff({
         </div>
       </div>
 
-      {/* Override Modal with Requirement #4 Mandatory Reason */}
+      {/* Override Modal */}
       {showOverrideModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
           <div className="glass-card border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl">
@@ -447,4 +671,3 @@ export function RecommendationAndSignoff({
     </div>
   );
 }
-

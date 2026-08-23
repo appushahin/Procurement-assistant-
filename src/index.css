@@ -265,3 +265,28 @@
   display: inline-block;
 }
 
+/* AI Thinking Indicator Pulsing Dots */
+@keyframes thinkingPulse {
+  0%, 100% {
+    transform: scale(0.75) translateY(0);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.3) translateY(-3px);
+    opacity: 1;
+    filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.9));
+  }
+}
+
+.animate-thinking-dot-1 {
+  animation: thinkingPulse 1.2s ease-in-out infinite 0s;
+}
+
+.animate-thinking-dot-2 {
+  animation: thinkingPulse 1.2s ease-in-out infinite 0.22s;
+}
+
+.animate-thinking-dot-3 {
+  animation: thinkingPulse 1.2s ease-in-out infinite 0.44s;
+}
+

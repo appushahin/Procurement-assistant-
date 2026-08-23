@@ -29,9 +29,73 @@ export interface VendorScoreDetail {
   warrantyScore: number;
   complianceScore: number;
   weighted: number;
+  isDisqualified?: boolean;
+  disqualificationReasons?: string[];
 }
 
 export type VendorScores = Record<string, VendorScoreDetail>;
+
+// Strict Binary Go / No-Go Gate Criteria
+export interface VendorBinaryGates {
+  failoverVerified: boolean; // Strict YES / NO for Mission-Critical Clustering / Failover
+  complianceCertified: boolean; // Strict YES / NO for Mandatory Industry & Quality Standards
+}
+
+export type VendorBinaryGateMap = Record<string, VendorBinaryGates>;
+
+// Total Cost of Ownership (TCO) 3-5 Year Lifecycle Breakdown
+export interface VendorTcoMetrics {
+  vendorKey: string;
+  vendorName: string;
+  initialCapex: number;
+  integrationWorkaroundCost: number;
+  annualSlaOpex: number;
+  contingencyRiskCost: number; // High if failover is unverified / slow SLA
+  totalYear1: number;
+  total3Year: number;
+  total5Year: number;
+}
+
+// "What-If" Sensitivity & Negotiation Simulator
+export interface VendorNegotiationSim {
+  priceDiscountPercent: number; // e.g. 0 to 25
+  leadTimeExpediteWeeks: number; // e.g. 0 to 6
+  warrantyExtensionYears: number; // e.g. 0 to 3
+  failoverVerified: boolean;
+  complianceCertified: boolean;
+}
+
+export type NegotiationSimMap = Record<string, VendorNegotiationSim>;
+
+// Multi-Tier Sequential Approval Hierarchy
+export interface ApprovalStep {
+  role: "Technical Lead" | "Finance Director" | "VP of Procurement";
+  title: string;
+  status: "pending" | "approved";
+  signeeName: string;
+  timestamp: string | null;
+  comments?: string;
+}
+
+export interface MultiTierSignoff {
+  tier1Tech: ApprovalStep;
+  tier2Finance: ApprovalStep;
+  tier3Executive: ApprovalStep;
+  awardedVendorKey: string;
+  isOverridden: boolean;
+  overrideRationale?: string;
+}
+
+// Project RFQ Scenarios
+export interface RfqScenario {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  quotes: VendorRawQuotes;
+  weights: DecisionWeights;
+  initialGates: VendorBinaryGateMap;
+}
 
 export type UserRole = "Procurement Officer" | "Approver" | "Client Viewer";
 
@@ -163,3 +227,6 @@ export interface KsaProjectConfig {
   includesCloudSoftware: boolean;
   minLcgpaThreshold: number; // e.g., 35%
 }
+
+export type BackgroundTheme = "glowing-red" | "dark-obsidian" | "light-porcelain";
+

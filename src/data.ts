@@ -62,11 +62,72 @@ We are a preferred vendor for two other mining-sector clients and can share refe
 };
 
 export const INITIAL_WEIGHTS: DecisionWeights = {
-  price: 25,
+  price: 40,
   leadTime: 35,
-  warranty: 20,
-  compliance: 20,
+  warranty: 25,
+  compliance: 0, // Compliance is now evaluated via Strict Binary Gatekeeper (YES / NO)
 };
+
+export const DEFAULT_BINARY_GATES: Record<string, { failoverVerified: boolean; complianceCertified: boolean }> = {
+  meridian: {
+    failoverVerified: true, // Factory pre-certified for continuous availability clustering
+    complianceCertified: true, // ISO 9001 + IEC 60950 full compliance
+  },
+  ironclad: {
+    failoverVerified: false, // Requires manual uncertified driver installation (FAILOVER GATE FAILED)
+    complianceCertified: true, // ISO 9001 standard compliance
+  },
+  vantage: {
+    failoverVerified: false, // Requires 3-day engineering workaround (FAILOVER GATE FAILED)
+    complianceCertified: true, // ISO 9001 + ISO 14001 compliance
+  },
+};
+
+export const RFQ_SCENARIOS = [
+  {
+    id: "security-command-center",
+    name: "Security Command Center Failover Servers",
+    category: "Mission-Critical Infrastructure",
+    description: "Twin-node continuous availability server pair supporting 24/7 access-control & VMS video management.",
+    quotes: INITIAL_QUOTES,
+    weights: { price: 40, leadTime: 35, warranty: 25, compliance: 0 },
+    initialGates: DEFAULT_BINARY_GATES,
+  },
+  {
+    id: "enterprise-cloud-dr",
+    name: "Enterprise Cloud DR & Multi-Region Gateway",
+    category: "IT & Telecommunications",
+    description: "High-throughput redundant storage appliances with automatic zero-data-loss snapshot replication.",
+    quotes: {
+      meridian: `HP CloudGateway Twin X9: $92,000 for paired appliances. 8 weeks delivery. 5-year 24/7 SLA. Zero-RPO active-active failover pre-certified. ISO 27001 & SOC 2 certified.`,
+      ironclad: `DELL EMC StorageCluster: $68,500. 14 weeks delivery. 3-year warranty. Failover requires custom scripts and manual IP failover daemon. ISO 9001.`,
+      vantage: `LENOVO ThinkSystem DR: $79,200. 10 weeks delivery. 4-year warranty. 8-hour support SLA. Failover requires vendor engineering setup plugin (4 days). ISO 27001.`,
+    },
+    weights: { price: 35, leadTime: 40, warranty: 25, compliance: 0 },
+    initialGates: {
+      meridian: { failoverVerified: true, complianceCertified: true },
+      ironclad: { failoverVerified: false, complianceCertified: true },
+      vantage: { failoverVerified: false, complianceCertified: true },
+    },
+  },
+  {
+    id: "mining-machinery-fleet",
+    name: "Mining Site Auxiliary Power & Redundant UPS",
+    category: "Heavy Mining & Energy",
+    description: "Industrial dual-feed UPS and generator switchgear meeting Ma'aden / Aramco severe ambient temperature specs.",
+    quotes: {
+      meridian: `HP Industrial HeavyPower 500kVA: $115,000. 10 weeks delivery. 5-year warranty, next-day site response. Automated dual-bus static transfer switch certified. HCIS & SASO certified.`,
+      ironclad: `DELL HeavyPower Titan: $89,000. 18 weeks delivery. 3-year standard warranty. Manual bypass transfer switch, unverified high-temp failover. ISO 9001 only.`,
+      vantage: `LENOVO MinePower Pro: $102,000. 12 weeks delivery. 4-year warranty. 24/7 remote SLA. Requires external sync controller for failover. SASO certified.`,
+    },
+    weights: { price: 45, leadTime: 30, warranty: 25, compliance: 0 },
+    initialGates: {
+      meridian: { failoverVerified: true, complianceCertified: true },
+      ironclad: { failoverVerified: false, complianceCertified: false },
+      vantage: { failoverVerified: false, complianceCertified: true },
+    },
+  },
+];
 
 export const FALLBACK_STRUCTURED_DATA: StructuredVendorData = {
   meridian: {

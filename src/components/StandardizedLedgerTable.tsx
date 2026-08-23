@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle2, AlertCircle, Shield, Award, Clock, DollarSign, Columns, LayoutGrid, ArrowRightLeft, Zap, Edit3, ListOrdered, Trophy, Sparkles, Globe, RefreshCw } from "lucide-react";
-import { StructuredVendorData, VendorScores, VendorMetrics, CurrencyCode, ExchangeRates } from "../types";
+import { StructuredVendorData, VendorScores, VendorMetrics, CurrencyCode, ExchangeRates, VendorBinaryGateMap } from "../types";
 import { VENDOR_NAMES } from "../data";
 import { EditVendorModal } from "./EditVendorModal";
 import { LanternLogo } from "./LanternLogo";
@@ -11,9 +11,18 @@ interface Props {
   scores: VendorScores;
   isSimulated?: boolean;
   onUpdateVendorData?: (vendorKey: string, updatedMetrics: VendorMetrics) => void;
+  binaryGates?: VendorBinaryGateMap;
+  onToggleBinaryGate?: (vendorKey: string, gateKey: "failoverVerified" | "complianceCertified") => void;
 }
 
-export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVendorData }: Props) {
+export function StandardizedLedgerTable({
+  data,
+  scores,
+  isSimulated,
+  onUpdateVendorData,
+  binaryGates = {},
+  onToggleBinaryGate,
+}: Props) {
   const vendorKeys = Object.keys(VENDOR_NAMES);
   const [viewMode, setViewMode] = useState<"ranked" | "matrix" | "split">("ranked");
   const [editingVendorKey, setEditingVendorKey] = useState<string | null>(null);
@@ -125,7 +134,7 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
           </h3>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-between lg:justify-end">
           {isSimulated && (
             <span className="font-mono text-xs px-2.5 py-1 rounded-full bg-zinc-900 text-zinc-300 border border-white/10">
               Offline Mode — Standardized locally
@@ -133,10 +142,10 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
           )}
 
           {/* View Mode Switcher */}
-          <div className="inline-flex rounded-xl border border-white/10 bg-zinc-950/80 p-1 backdrop-blur-md">
+          <div className="w-full sm:w-auto flex rounded-xl border border-white/10 bg-zinc-950/80 p-1 backdrop-blur-md overflow-x-auto">
             <button
               onClick={() => setViewMode("ranked")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer whitespace-nowrap ${
                 viewMode === "ranked"
                   ? "bg-cyan-600 text-white shadow-md font-semibold"
                   : "text-zinc-400 hover:text-white"
@@ -148,7 +157,7 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
 
             <button
               onClick={() => setViewMode("matrix")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer whitespace-nowrap ${
                 viewMode === "matrix"
                   ? "bg-cyan-600 text-white shadow-md font-semibold"
                   : "text-zinc-400 hover:text-white"
@@ -160,22 +169,22 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
 
             <button
               onClick={() => setViewMode("split")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer whitespace-nowrap ${
                 viewMode === "split"
                   ? "bg-cyan-600 text-white shadow-md font-semibold"
                   : "text-zinc-400 hover:text-white"
               }`}
             >
               <Columns size={14} />
-              <span>Split-Screen Compare</span>
+              <span>Split-Screen</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Multi-Currency Conversion Control Bar */}
-      <div className="bg-zinc-950/90 p-3.5 rounded-xl border border-white/10 mb-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 font-mono text-xs shadow-inner">
-        <div className="flex items-center gap-3">
+      <div className="bg-zinc-950/90 p-3.5 rounded-xl border border-white/10 mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 font-mono text-xs shadow-inner">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5 text-zinc-300 font-bold uppercase tracking-wider text-[11px]">
             <Globe size={15} className="text-emerald-400" />
             <span>Display Currency:</span>
@@ -219,7 +228,7 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
         </div>
 
         {/* Live Automated Exchange Rates Ticker */}
-        <div className="flex items-center gap-3 text-[11px] text-zinc-400 self-end sm:self-auto bg-zinc-900/80 px-3 py-1.5 rounded-lg border border-white/10">
+        <div className="flex items-center justify-between sm:justify-start gap-3 text-[11px] text-zinc-400 bg-zinc-900/80 px-3 py-1.5 rounded-lg border border-white/10">
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
             <span>
@@ -246,14 +255,143 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400 bg-zinc-950/60 p-3 rounded-xl border border-white/10">
             <div className="flex items-center gap-2 text-zinc-300 font-semibold">
               <Sparkles size={14} className="text-red-400 animate-pulse" />
-              <span>Smooth Layout Reordering: Rows dynamically reorder when weight adjustments change vendor scores.</span>
+              <span>Smooth Dynamic Reordering: Sorted by weighted score.</span>
             </div>
             <span className="text-[11px] text-zinc-500 font-normal hidden sm:inline">
               Sorted by Score (High → Low)
             </span>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-white/10 shadow-2xl">
+          {/* MOBILE VIEW CARDS (< sm screens) */}
+          <div className="block sm:hidden space-y-3">
+            <AnimatePresence mode="popLayout">
+              {sortedVendorKeys.map((key, index) => {
+                const score = scores[key]?.weighted || 0;
+                const metrics = data[key];
+                const isWinner = index === 0;
+
+                return (
+                  <motion.div
+                    key={key}
+                    layout
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{
+                      layout: { type: "spring", stiffness: 320, damping: 26 },
+                      opacity: { duration: 0.2 },
+                    }}
+                    className={`glass-card p-4 rounded-2xl border transition-all ${
+                      isWinner
+                        ? "bg-red-950/40 border-red-500/60 shadow-lg shadow-red-950/40"
+                        : "bg-zinc-900/60 border-white/10"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 pb-3 border-b border-white/10">
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-mono font-bold shadow-sm ${
+                            isWinner
+                              ? "bg-gradient-to-br from-red-500 to-rose-700 text-white shadow-red-600/40"
+                              : index === 1
+                              ? "bg-zinc-800 text-zinc-200 border border-zinc-700"
+                              : "bg-zinc-900 text-zinc-400 border border-zinc-800"
+                          }`}
+                        >
+                          #{index + 1}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <h4 className="font-sans font-bold text-white text-base">
+                              {VENDOR_NAMES[key]}
+                            </h4>
+                            {isWinner && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] bg-red-600 text-white px-2 py-0.5 rounded-full font-bold shadow-sm uppercase">
+                                <Trophy size={10} /> Top
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-mono text-zinc-400">
+                            SLA: {metrics?.supportSLA || "Standard"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setEditingVendorKey(key)}
+                        className="p-2 rounded-lg text-zinc-300 hover:text-white bg-zinc-800/80 border border-white/10 hover:bg-zinc-700 transition-colors"
+                        title={`Edit ${VENDOR_NAMES[key]}`}
+                      >
+                        <Edit3 size={14} className="text-red-400" />
+                      </button>
+                    </div>
+
+                    <div className="py-3 space-y-2.5">
+                      {/* Score Bar */}
+                      <div>
+                        <div className="flex items-center justify-between text-xs font-mono mb-1">
+                          <span className="text-zinc-400">Weighted Score</span>
+                          <span className={`font-extrabold text-sm ${isWinner ? "text-red-400" : "text-white"}`}>
+                            {score} <span className="text-xs text-zinc-500 font-normal">/ 100</span>
+                          </span>
+                        </div>
+                        <div className="w-full bg-zinc-950 rounded-full h-2 overflow-hidden border border-white/10">
+                          <motion.div
+                            className={`h-full rounded-full ${
+                              isWinner ? "bg-gradient-to-r from-red-500 to-rose-400" : "bg-zinc-500"
+                            }`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(100, Math.max(0, score))}%` }}
+                            transition={{ duration: 0.4, ease: "easeOut" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2x2 Grid for Key Metrics */}
+                      <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-1">
+                        <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-white/5">
+                          <span className="text-[10px] text-zinc-400 block">Price ({currency})</span>
+                          <span className="font-bold text-emerald-400 text-sm">
+                            {formatCurrency(metrics?.priceUSD || 0, currency)}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-white/5">
+                          <span className="text-[10px] text-zinc-400 block">Lead Time</span>
+                          <span className="font-bold text-white text-sm">
+                            {metrics?.leadTimeWeeks} <span className="text-xs text-zinc-400 font-normal">weeks</span>
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-white/5">
+                          <span className="text-[10px] text-zinc-400 block">Warranty</span>
+                          <span className="font-bold text-white text-sm">
+                            {metrics?.warrantyYears} <span className="text-xs text-zinc-400 font-normal">years</span>
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-white/5 flex flex-col justify-center">
+                          <span className="text-[10px] text-zinc-400 block">Failover</span>
+                          {metrics?.redundancyCertified ? (
+                            <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-1">
+                              <CheckCircle2 size={11} /> Certified
+                            </span>
+                          ) : (
+                            <span className="text-red-400 text-[11px] font-bold flex items-center gap-1">
+                              <AlertCircle size={11} /> Workaround
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+
+          {/* DESKTOP / TABLET TABLE VIEW (sm+ screens) */}
+          <div className="hidden sm:block overflow-x-auto rounded-xl border border-white/10 shadow-2xl">
             <table className="w-full text-left text-xs font-mono border-collapse min-w-[750px]">
               <thead>
                 <tr className="border-b border-white/10 text-zinc-400 bg-zinc-950/90 uppercase tracking-wider text-[11px]">
@@ -263,7 +401,8 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
                   <th className="py-3.5 px-4 font-semibold">Price ({currency})</th>
                   <th className="py-3.5 px-4 font-semibold">Lead Time</th>
                   <th className="py-3.5 px-4 font-semibold">Warranty</th>
-                  <th className="py-3.5 px-4 font-semibold">Failover</th>
+                  <th className="py-3.5 px-4 font-semibold">Failover Gate</th>
+                  <th className="py-3.5 px-4 font-semibold">Compliance Gate</th>
                   <th className="py-3.5 px-4 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
@@ -271,8 +410,13 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
                 <AnimatePresence mode="popLayout">
                   {sortedVendorKeys.map((key, index) => {
                     const score = scores[key]?.weighted || 0;
+                    const isDisqualified = scores[key]?.isDisqualified ?? false;
                     const metrics = data[key];
-                    const isWinner = index === 0;
+                    const isWinner = index === 0 && !isDisqualified;
+                    const gates = binaryGates[key] || {
+                      failoverVerified: metrics?.redundancyCertified ?? false,
+                      complianceCertified: true,
+                    };
 
                     return (
                       <motion.tr
@@ -286,33 +430,43 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
                           opacity: { duration: 0.2 }
                         }}
                         className={`group hover:bg-white/5 transition-colors ${
-                          isWinner ? "bg-red-950/30 border-l-4 border-l-red-500" : "border-l-4 border-l-transparent"
+                          isDisqualified
+                            ? "bg-red-950/20 opacity-85 border-l-4 border-l-red-500"
+                            : isWinner
+                            ? "bg-cyan-950/30 border-l-4 border-l-cyan-500"
+                            : "border-l-4 border-l-transparent"
                         }`}
                       >
                         {/* Rank Badge */}
                         <td className="py-4 px-4 font-bold">
                           <div className="flex items-center gap-1.5">
                             <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-mono font-bold shadow-sm ${
-                              isWinner
-                                ? "bg-gradient-to-br from-red-500 to-rose-700 text-white shadow-red-600/40"
+                              isDisqualified
+                                ? "bg-red-950 text-red-400 border border-red-500/40"
+                                : isWinner
+                                ? "bg-gradient-to-br from-cyan-500 to-blue-700 text-white shadow-cyan-600/40"
                                 : index === 1
                                 ? "bg-zinc-800 text-zinc-200 border border-zinc-700"
                                 : "bg-zinc-900 text-zinc-400 border border-zinc-800"
                             }`}>
-                              #{index + 1}
+                              {isDisqualified ? "✕" : `#${index + 1}`}
                             </span>
                           </div>
                         </td>
 
                         {/* Vendor Name */}
                         <td className="py-4 px-4 font-sans font-bold text-white text-sm">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span>{VENDOR_NAMES[key]}</span>
-                            {isWinner && (
-                              <span className="inline-flex items-center gap-1 text-[10px] bg-red-600 text-white px-2.5 py-0.5 rounded-full font-bold shadow-sm shadow-red-600/50 uppercase tracking-wide animate-pulse">
-                                <Trophy size={11} /> Top Score
+                            {isDisqualified ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] bg-red-950/80 text-red-400 px-2 py-0.5 rounded-full font-bold border border-red-500/50 uppercase tracking-wide">
+                                ✕ Disqualified (Gate)
                               </span>
-                            )}
+                            ) : isWinner ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] bg-cyan-600 text-white px-2.5 py-0.5 rounded-full font-bold shadow-sm shadow-cyan-600/50 uppercase tracking-wide animate-pulse">
+                                <Trophy size={11} /> Top Qualified
+                              </span>
+                            ) : null}
                           </div>
                           <div className="text-[11px] font-mono text-zinc-400 font-normal mt-0.5">
                             SLA: {metrics?.supportSLA || "Standard"}
@@ -325,14 +479,18 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
                             <div className="w-24 bg-zinc-950 rounded-full h-2.5 overflow-hidden border border-white/10 p-0.5">
                               <motion.div
                                 className={`h-full rounded-full ${
-                                  isWinner ? "bg-gradient-to-r from-red-500 to-rose-400" : "bg-zinc-500"
+                                  isDisqualified
+                                    ? "bg-red-500"
+                                    : isWinner
+                                    ? "bg-gradient-to-r from-cyan-500 to-blue-400"
+                                    : "bg-zinc-500"
                                 }`}
                                 initial={{ width: 0 }}
                                 animate={{ width: `${Math.min(100, Math.max(0, score))}%` }}
                                 transition={{ duration: 0.4, ease: "easeOut" }}
                               />
                             </div>
-                            <span className={`text-base font-extrabold ${isWinner ? "text-red-400" : "text-white"}`}>
+                            <span className={`text-base font-extrabold ${isDisqualified ? "text-red-400 line-through" : isWinner ? "text-cyan-400" : "text-white"}`}>
                               {score}
                             </span>
                             <span className="text-xs text-zinc-500 font-normal">/ 100</span>
@@ -361,17 +519,54 @@ export function StandardizedLedgerTable({ data, scores, isSimulated, onUpdateVen
                           <span className="font-semibold text-white">{metrics?.warrantyYears}</span> yrs
                         </td>
 
-                        {/* Failover Pre-certified */}
+                        {/* Failover Pre-certified Gate */}
                         <td className="py-4 px-4">
-                          {metrics?.redundancyCertified ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-emerald-950/60 text-emerald-300 font-medium border border-emerald-500/30">
-                              <CheckCircle2 size={12} /> Pre-Certified
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-red-950/60 text-red-300 font-medium border border-red-500/30">
-                              <AlertCircle size={12} /> Workaround
-                            </span>
-                          )}
+                          <button
+                            onClick={() => onToggleBinaryGate?.(key, "failoverVerified")}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
+                              gates.failoverVerified
+                                ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-900"
+                                : "bg-red-950/80 text-red-300 border border-red-500/40 hover:bg-red-900"
+                            }`}
+                            title="Click to toggle failover certification gate"
+                          >
+                            {gates.failoverVerified ? (
+                              <>
+                                <CheckCircle2 size={12} className="text-emerald-400" />
+                                <span>YES (Certified)</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle size={12} className="text-red-400" />
+                                <span>NO (Failed)</span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+
+                        {/* Compliance Certified Gate */}
+                        <td className="py-4 px-4">
+                          <button
+                            onClick={() => onToggleBinaryGate?.(key, "complianceCertified")}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
+                              gates.complianceCertified
+                                ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-900"
+                                : "bg-red-950/80 text-red-300 border border-red-500/40 hover:bg-red-900"
+                            }`}
+                            title="Click to toggle compliance certification gate"
+                          >
+                            {gates.complianceCertified ? (
+                              <>
+                                <CheckCircle2 size={12} className="text-emerald-400" />
+                                <span>YES (Compliant)</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle size={12} className="text-red-400" />
+                                <span>NO (Non-Compliant)</span>
+                              </>
+                            )}
+                          </button>
                         </td>
 
                         {/* Actions */}

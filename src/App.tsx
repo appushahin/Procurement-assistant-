@@ -18,23 +18,60 @@ import {
   Sun,
   CheckCircle2,
   Lock,
-  RotateCcw
+  RotateCcw,
+  Sliders,
+  DollarSign,
+  Briefcase,
+  TrendingDown,
+  Scale,
 } from "lucide-react";
-import { VendorRawQuotes, StructuredVendorData, DecisionWeights, RecommendationResult, SignOffRecord, VendorMetrics, UserRole } from "./types";
-import { INITIAL_QUOTES, INITIAL_WEIGHTS, VENDOR_NAMES, FALLBACK_STRUCTURED_DATA } from "./data";
-import { calculateVendorScores, generateFallbackRecommendation } from "./utils";
-import { exportToCSV, exportToPDF, exportToMaadenWord, exportToMaadenPowerPoint } from "./exportUtils";
+import {
+  VendorRawQuotes,
+  StructuredVendorData,
+  DecisionWeights,
+  RecommendationResult,
+  SignOffRecord,
+  VendorMetrics,
+  UserRole,
+  BackgroundTheme,
+  VendorBinaryGateMap,
+  MultiTierSignoff,
+  CurrencyCode,
+  ExchangeRates,
+} from "./types";
+import {
+  INITIAL_QUOTES,
+  INITIAL_WEIGHTS,
+  VENDOR_NAMES,
+  FALLBACK_STRUCTURED_DATA,
+  DEFAULT_BINARY_GATES,
+  RFQ_SCENARIOS,
+} from "./data";
+import {
+  calculateVendorScores,
+  calculateVendorTco,
+  generateFallbackRecommendation,
+} from "./utils";
+import {
+  exportToCSV,
+  exportToPDF,
+  exportToMaadenWord,
+  exportToMaadenPowerPoint,
+} from "./exportUtils";
 
 import { QuoteInputSection } from "./components/QuoteInputSection";
 import { StandardizedLedgerTable } from "./components/StandardizedLedgerTable";
 import { RiskAssessmentHeatmap } from "./components/RiskAssessmentHeatmap";
 import { SaudiComplianceEngine } from "./components/SaudiComplianceEngine";
 import { ScoreChartAndWeights } from "./components/ScoreChartAndWeights";
+import { RadarComparisonChart } from "./components/RadarComparisonChart";
+import { TcoLifecycleAnalysis } from "./components/TcoLifecycleAnalysis";
+import { NegotiationSimulator } from "./components/NegotiationSimulator";
+import { NegotiationLetterGenerator } from "./components/NegotiationLetterGenerator";
 import { RecommendationAndSignoff } from "./components/RecommendationAndSignoff";
+import { RfqScenarioSwitcher } from "./components/RfqScenarioSwitcher";
 import { ProcurementChatAssistant } from "./components/ProcurementChatAssistant";
 import { LanternLogo } from "./components/LanternLogo";
-
-export type BackgroundTheme = "glowing-red" | "dark-obsidian" | "light-porcelain";
 
 export default function App() {
   const [quotes, setQuotes] = useState<VendorRawQuotes>(INITIAL_QUOTES);
@@ -43,13 +80,58 @@ export default function App() {
   const [standardizeError, setStandardizeError] = useState<string | null>(null);
   const [isSimulatedData, setIsSimulatedData] = useState<boolean>(false);
 
+  // Binary Compliance & Failover Gates State (Strict YES / NO)
+  const [binaryGates, setBinaryGates] = useState<VendorBinaryGateMap>(DEFAULT_BINARY_GATES);
+
+  // Weights state
   const [weights, setWeights] = useState<DecisionWeights>(INITIAL_WEIGHTS);
 
+  // Active RFQ Scenario
+  const [activeScenarioId, setActiveScenarioId] = useState<string>("security-command-center");
+
+  // Currency & Rate state
+  const [currency, setCurrency] = useState<CurrencyCode>("SAR");
+  const [ratesData, setRatesData] = useState<ExchangeRates>({
+    base: "USD",
+    rates: { USD: 1.0, SAR: 3.75, EUR: 0.918 },
+    lastUpdated: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    source: "SAMA Peg / ECB Benchmark",
+  });
+
+  // Price conversion helper
+  const convertPrice = (priceUSD: number, targetCurrency: CurrencyCode) => {
+    const rate = ratesData.rates[targetCurrency] || 1.0;
+    return priceUSD * rate;
+  };
+
+  const formatCurrency = (priceUSD: number, targetCurrency: CurrencyCode) => {
+    const converted = convertPrice(priceUSD, targetCurrency);
+    if (targetCurrency === "SAR") {
+      return `${Math.round(converted).toLocaleString()} SAR`;
+    } else if (targetCurrency === "EUR") {
+      return `€${Math.round(converted).toLocaleString()}`;
+    } else {
+      return `$${Math.round(converted).toLocaleString()}`;
+    }
+  };
+
+  // Negotiation Letter Modal state
+  const [letterVendorKey, setLetterVendorKey] = useState<string | null>(null);
+
+  // AI Recommendation State
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
   const [isGeneratingRec, setIsGeneratingRec] = useState<boolean>(false);
   const [recError, setRecError] = useState<string | null>(null);
 
+  // Single Signoff Fallback & Multi-Tier Signoff State
   const [signoff, setSignoff] = useState<SignOffRecord | null>(null);
+  const [multiTierSignoff, setMultiTierSignoff] = useState<MultiTierSignoff>({
+    tier1Tech: { status: "pending" },
+    tier2Finance: { status: "pending" },
+    tier3Executive: { status: "pending" },
+    awardedVendorKey: null,
+  });
+
   const [userRole, setUserRole] = useState<UserRole>("Procurement Officer");
   const [bgTheme, setBgTheme] = useState<BackgroundTheme>(() => {
     return (localStorage.getItem("lantern_bg_theme") as BackgroundTheme) || "glowing-red";
@@ -76,6 +158,52 @@ export default function App() {
     setTimeout(() => setShowRoleToast(false), 3800);
   };
 
+  // Toggle Binary Gate (Strict YES/NO)
+  const handleToggleBinaryGate = (
+    vendorKey: string,
+    gateKey: "failoverVerified" | "complianceCertified"
+  ) => {
+    setBinaryGates((prev) => {
+      const current = prev[vendorKey] || { failoverVerified: false, complianceCertified: true };
+      return {
+        ...prev,
+        [vendorKey]: {
+          ...current,
+          [gateKey]: !current[gateKey],
+        },
+      };
+    });
+  };
+
+  // Compute vendor scores whenever structuredData, weights, or binaryGates change
+  const scores = useMemo(() => {
+    if (!structuredData) return {};
+    return calculateVendorScores(structuredData, weights, binaryGates);
+  }, [structuredData, weights, binaryGates]);
+
+  // Scenario Switcher Handler
+  const handleSelectScenario = (scenario: (typeof RFQ_SCENARIOS)[0]) => {
+    setActiveScenarioId(scenario.id);
+    setQuotes(scenario.quotes);
+    if (scenario.initialGates) {
+      setBinaryGates(scenario.initialGates);
+    }
+    if (scenario.weights) {
+      setWeights(scenario.weights);
+    }
+    setRecommendation(null);
+    setSignoff(null);
+    setMultiTierSignoff({
+      tier1Tech: { status: "pending" },
+      tier2Finance: { status: "pending" },
+      tier3Executive: { status: "pending" },
+      awardedVendorKey: null,
+    });
+    setRoleToastMessage(`Scenario loaded: ${scenario.name}`);
+    setShowRoleToast(true);
+    setTimeout(() => setShowRoleToast(false), 3000);
+  };
+
   // Handle manual editing of vendor data
   const handleUpdateVendorData = (vendorKey: string, updatedMetrics: VendorMetrics) => {
     setStructuredData((prev) => {
@@ -87,11 +215,66 @@ export default function App() {
     });
   };
 
-  // Compute vendor scores whenever structuredData or weights change
-  const scores = useMemo(() => {
-    if (!structuredData) return {};
-    return calculateVendorScores(structuredData, weights);
-  }, [structuredData, weights]);
+  // Apply simulated data from NegotiationSimulator
+  const handleApplySimulatedData = (
+    simData: StructuredVendorData,
+    simGates: VendorBinaryGateMap
+  ) => {
+    setStructuredData(simData);
+    setBinaryGates(simGates);
+    setRoleToastMessage("BAFO negotiated parameters applied to active ledger.");
+    setShowRoleToast(true);
+    setTimeout(() => setShowRoleToast(false), 3000);
+  };
+
+  // Multi-Tier Sequential Approval Handlers
+  const handleApproveTier = (
+    tier: "tier1Tech" | "tier2Finance" | "tier3Executive",
+    signee: string,
+    comments?: string
+  ) => {
+    const sortedVendors = Object.keys(scores).sort(
+      (a, b) => (scores[b]?.weighted || 0) - (scores[a]?.weighted || 0)
+    );
+    const qualifiedVendors = sortedVendors.filter((k) => !scores[k]?.isDisqualified);
+    const targetVendor = qualifiedVendors[0] || sortedVendors[0] || "meridian";
+
+    setMultiTierSignoff((prev) => {
+      const now = new Date().toLocaleString();
+      const updated = {
+        ...prev,
+        [tier]: {
+          status: "approved" as const,
+          signeeName: signee,
+          timestamp: now,
+          comments: comments || "Verified and certified under governance compliance standards.",
+        },
+      };
+
+      if (tier === "tier3Executive") {
+        updated.awardedVendorKey = targetVendor;
+        // Also update unified signoff record
+        setSignoff({
+          status: "approved",
+          vendor: targetVendor,
+          reason: "Awarded following successful 3-Tier Multi-Disciplinary sign-off.",
+          signoffUser: signee,
+          time: now,
+        });
+      }
+      return updated;
+    });
+  };
+
+  const handleResetMultiTier = () => {
+    setMultiTierSignoff({
+      tier1Tech: { status: "pending" },
+      tier2Finance: { status: "pending" },
+      tier3Executive: { status: "pending" },
+      awardedVendorKey: null,
+    });
+    setSignoff(null);
+  };
 
   // Export handlers
   const handleExportCSV = () => {
@@ -148,8 +331,9 @@ export default function App() {
     const sortedVendors = [...vendorKeys].sort(
       (a, b) => (scores[b]?.weighted || 0) - (scores[a]?.weighted || 0)
     );
-    const topVendor = sortedVendors[0] || "meridian";
-    const secondVendor = sortedVendors[1] || "vantage";
+    const qualifiedVendors = sortedVendors.filter((k) => !scores[k]?.isDisqualified);
+    const topVendor = qualifiedVendors[0] || sortedVendors[0] || "meridian";
+    const secondVendor = qualifiedVendors[1] || sortedVendors[1] || "vantage";
 
     try {
       const res = await fetch("/api/generate-recommendation", {
@@ -159,6 +343,7 @@ export default function App() {
           structuredData,
           scores,
           weights,
+          binaryGates,
         }),
       });
 
@@ -273,7 +458,7 @@ export default function App() {
     <div
       className={`min-h-screen font-sans antialiased selection:bg-red-600 selection:text-white relative transition-all duration-700 ease-in-out ${bgCanvasClasses} theme-role-${roleTheme.key}`}
     >
-      {/* Background ambient lighting with radiant glowing red meshes for glassmorphism refraction */}
+      {/* Ambient background glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 transition-opacity duration-700">
         {bgTheme === "glowing-red" && (
           <>
@@ -301,7 +486,7 @@ export default function App() {
       {/* Floating Animated Role Switch Toast Notification */}
       {showRoleToast && (
         <div
-          className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl glass-header border shadow-2xl flex items-center gap-2.5 backdrop-blur-2xl text-xs font-medium animate-fadeIn transition-all duration-300"
+          className="fixed top-4 sm:top-5 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl glass-header border shadow-2xl flex items-center gap-2 sm:gap-2.5 backdrop-blur-2xl text-xs font-medium animate-fadeIn transition-all duration-300 max-w-[92vw] sm:max-w-md w-auto"
           style={{
             borderColor:
               userRole === "Approver"
@@ -313,24 +498,24 @@ export default function App() {
           }}
         >
           {roleTheme.roleIcon}
-          <span className="text-white font-bold">{roleTheme.roleLabel}</span>
-          <span className="text-zinc-500">•</span>
-          <span className="text-zinc-300 text-[11px]">{roleToastMessage}</span>
+          <span className="text-white font-bold whitespace-nowrap">{roleTheme.roleLabel}</span>
+          <span className="text-zinc-500 hidden sm:inline">•</span>
+          <span className="text-zinc-300 text-[11px] truncate sm:whitespace-normal">{roleToastMessage}</span>
         </div>
       )}
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        {/* Header with Live Animated Lantern Company Logo in Glassmorphic Container & Dynamic Role Borders */}
+      <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-6 py-5 sm:py-8">
+        {/* Header with Live Animated Lantern Company Logo */}
         <header
-          className={`mb-8 glass-header p-5 sm:p-6 rounded-2xl relative overflow-hidden shadow-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-5 transition-all duration-500 ease-in-out ${roleTheme.headerBorder}`}
+          className={`mb-6 sm:mb-8 glass-header p-4 sm:p-6 rounded-2xl relative overflow-hidden shadow-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-5 transition-all duration-500 ease-in-out ${roleTheme.headerBorder}`}
         >
           <div className="absolute top-0 right-0 w-96 h-32 bg-red-600/20 blur-3xl rounded-full pointer-events-none"></div>
 
-          <div className="flex items-center gap-3">
-            <LanternLogo size="lg" showTagline={true} animated={true} />
+          <div className="flex items-center justify-between sm:justify-start gap-3">
+            <LanternLogo size="lg" showTagline={true} animated={true} className="max-w-[220px] sm:max-w-none" />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 justify-start sm:justify-end">
             {/* Active Governance Role Toggle with Dynamic Theming */}
             <div
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-mono backdrop-blur-md shadow-inner transition-all duration-500 ease-in-out ${roleTheme.rolePillBg}`}
@@ -342,7 +527,7 @@ export default function App() {
               <select
                 value={userRole}
                 onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                className="bg-transparent font-bold focus:outline-none cursor-pointer"
+                className="bg-transparent font-bold focus:outline-none cursor-pointer text-xs"
               >
                 <option value="Procurement Officer" className="bg-zinc-950 text-white">
                   Procurement Officer
@@ -473,6 +658,12 @@ export default function App() {
           </div>
         </header>
 
+        {/* RFQ Scenario Switcher */}
+        <RfqScenarioSwitcher
+          activeScenarioId={activeScenarioId}
+          onSelectScenario={handleSelectScenario}
+        />
+
         {/* Component 1: Raw Quotes Input */}
         <QuoteInputSection
           quotes={quotes}
@@ -490,6 +681,8 @@ export default function App() {
             scores={scores}
             isSimulated={isSimulatedData}
             onUpdateVendorData={handleUpdateVendorData}
+            binaryGates={binaryGates}
+            onToggleBinaryGate={handleToggleBinaryGate}
           />
         )}
 
@@ -506,16 +699,52 @@ export default function App() {
           />
         )}
 
-        {/* Component 3: Score Visualizations & Weights */}
+        {/* Component 3: Binary Gatekeeper & Evaluative Weights Matrix */}
         {structuredData && (
           <ScoreChartAndWeights
             weights={weights}
             setWeights={setWeights}
             scores={scores}
+            binaryGates={binaryGates}
+            onToggleBinaryGate={handleToggleBinaryGate}
           />
         )}
 
-        {/* Component 4: Recommendation & Signoff */}
+        {/* Component 3.2: Multi-Dimensional Radar Comparison Chart */}
+        {structuredData && (
+          <RadarComparisonChart
+            data={structuredData}
+            scores={scores}
+            binaryGates={binaryGates}
+          />
+        )}
+
+        {/* Component 3.5: 3-to-5 Year TCO Lifecycle & Financial Risk Analysis */}
+        {structuredData && (
+          <TcoLifecycleAnalysis
+            data={structuredData}
+            binaryGates={binaryGates}
+            currency={currency}
+            convertPrice={convertPrice}
+            formatCurrency={formatCurrency}
+          />
+        )}
+
+        {/* Component 3.8: BAFO Negotiation "What-If" Sensitivity Simulator */}
+        {structuredData && (
+          <NegotiationSimulator
+            baseData={structuredData}
+            weights={weights}
+            baseScores={scores}
+            baseGates={binaryGates}
+            currency={currency}
+            formatCurrency={formatCurrency}
+            onApplySimulatedData={handleApplySimulatedData}
+            onOpenLetterGenerator={(vKey) => setLetterVendorKey(vKey)}
+          />
+        )}
+
+        {/* Component 4: Recommendation & Multi-Tier Signoff Governance */}
         {structuredData && (
           <RecommendationAndSignoff
             onGenerate={handleGenerateRecommendation}
@@ -523,6 +752,9 @@ export default function App() {
             recommendation={recommendation}
             error={recError}
             signoff={signoff}
+            multiTierSignoff={multiTierSignoff}
+            onApproveTier={handleApproveTier}
+            onResetMultiTier={handleResetMultiTier}
             onApprove={handleApprove}
             onOverride={handleOverride}
             onResetSignoff={handleResetSignoff}
@@ -531,6 +763,8 @@ export default function App() {
             onExportWord={handleExportWord}
             onExportPPT={handleExportPPT}
             userRole={userRole}
+            binaryGates={binaryGates}
+            scores={scores}
           />
         )}
 
@@ -539,13 +773,13 @@ export default function App() {
           <div className="flex items-center gap-3">
             <LanternLogo size="sm" showTagline={false} animated={true} />
             <span className="text-zinc-600">|</span>
-            <span className="text-zinc-400">Enterprise Procurement Governance</span>
+            <span className="text-zinc-400">Enterprise Procurement Governance & Binary Gate Verification</span>
           </div>
           <span className="text-zinc-600 text-[11px]">Lantern Intelligent Operations Suite — RFQ-2026</span>
         </footer>
       </div>
 
-      {/* Floating Procurement Chat Assistant */}
+      {/* Floating Procurement Chat Assistant with dynamic theme alignment */}
       <ProcurementChatAssistant
         structuredData={structuredData}
         scores={scores}
@@ -553,7 +787,21 @@ export default function App() {
         recommendation={recommendation}
         signoff={signoff}
         quotes={quotes}
+        bgTheme={bgTheme}
+        binaryGates={binaryGates}
       />
+
+      {/* Formal Negotiation Letter Generator Modal */}
+      {letterVendorKey && structuredData && (
+        <NegotiationLetterGenerator
+          vendorKey={letterVendorKey}
+          data={structuredData}
+          binaryGates={binaryGates}
+          formatCurrency={formatCurrency}
+          currency={currency}
+          onClose={() => setLetterVendorKey(null)}
+        />
+      )}
     </div>
   );
 }
