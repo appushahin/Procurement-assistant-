@@ -18,6 +18,7 @@ import {
 import { StructuredVendorData, VendorBinaryGateMap, CurrencyCode } from "../types";
 import { VENDOR_NAMES } from "../data";
 import { LanternLogo } from "./LanternLogo";
+import { AppLanguage, TRANSLATIONS } from "../translations";
 
 interface Props {
   vendorKey: string;
@@ -26,6 +27,7 @@ interface Props {
   currency: CurrencyCode;
   formatCurrency: (priceUSD: number, targetCurrency: CurrencyCode) => string;
   onClose: () => void;
+  lang?: AppLanguage;
 }
 
 type LetterTemplate = "bafo_counter" | "failover_clarification" | "saudi_commercial";
@@ -37,11 +39,14 @@ export function NegotiationLetterGenerator({
   currency,
   formatCurrency,
   onClose,
+  lang = "en",
 }: Props) {
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
   const [template, setTemplate] = useState<LetterTemplate>("bafo_counter");
   const [requestedDiscount, setRequestedDiscount] = useState<number>(8);
   const [targetLeadTime, setTargetLeadTime] = useState<number>(8);
-  const [recipientName, setRecipientName] = useState<string>("Commercial Accounts Lead");
+  const [recipientName, setRecipientName] = useState<string>(isAr ? "مدير الحسابات والمبيعات التجارية" : "Commercial Accounts Lead");
   const [copied, setCopied] = useState<boolean>(false);
 
   const vendorName = VENDOR_NAMES[vendorKey] || vendorKey;
@@ -52,11 +57,111 @@ export function NegotiationLetterGenerator({
 
   // Generate Letter Text based on selected template
   const generateLetterBody = (): string => {
-    const today = new Date().toLocaleDateString("en-US", {
+    const today = new Date().toLocaleDateString(isAr ? "ar-SA" : "en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
     });
+
+    if (isAr) {
+      if (template === "failover_clarification") {
+        return `إدارة المشتريات والحوكمة الاستراتيجية
+لجنة التقييم الفني والتجاري
+التاريخ: ${today}
+المرجع: RFQ-2026-0803 / إشعار استيضاح فني ملزم
+
+إلى: إدارة المبيعات والهندسة بشركة ${vendorName}
+عناية: ${recipientName} المحترم
+الموضوع: استيضاح فني رسمي – شهادة الجاهزية وتجاوز الأعطال اللحظي (Continuous-Availability)
+
+تحية طيبة وبعد،،
+
+بناءً على المراجعة الفنية الأولية التي أجرتها لجنة التقييم لعرضكم المقدم لتوريد خوادم مركز العمليات والتحكم، نود توجيه هذا الاستفسار الفني بشأن بنية التكرار وتجاوز الأعطال المقترحة:
+
+بيانات التقييم الفني:
+1. المعدات المعروضة: ${v?.specsSummary || "خوادم متطابقة فائقة التوافر"}
+2. السعر المقدم: ${formatCurrency(originalPrice, currency)}
+3. شرط الامتثال الإلزامي: شرط حاسم (جاهزية بنسبة 99.999% وتجاوز فوري للأعطال بدون توقف)
+
+الملاحظات والاشتراطات المطلوبة:
+تتطلب وثيقة الشروط والمواصفات شهادة معتمدة مسبقاً من المصنع لتجاوز الأعطال التلقائي. يرجى تقديم ما يلي خلال 5 أيام عمل:
+- تأكيد رسمي ومستندات فنية معتمدة من الشركة المصنعة تثبت عدم فقدان البيانات والتحويل الآلي دون تدخل بشري.
+- توضيح ما إذا كان الدعم الفني على مدار الساعة طوال أيام الأسبوع (24/7) مشمولاً في العرض الأساسي.
+
+علماً بأن عدم تقديم الوثائق المطلوبة سيترتب عليه استبعاد العرض لعدم استيفاء الشروط الإلزامية.
+
+وتفضلوا بقبول فائق الاحترام والتقدير،،
+
+رئيس لجنة التقييم والمشتريات الاستراتيجية`;
+      }
+
+      if (template === "saudi_commercial") {
+        return `إدارة المشتريات الاستراتيجية وتنمية المحتوى المحلي
+لجنة البنية التحتية والامتثال للأنظمة السعودية
+التاريخ: ${today}
+المرجع: RFQ-2026-0803 / إشعار العرض النهائي ومتطلبات المحتوى المحلي
+
+إلى: شركة ${vendorName} – فرع المملكة العربية السعودية
+عناية: ${recipientName} المحترم
+الموضوع: العرض المالي المعدل والامتثال لمعايير المحتوى المحلي (LCGPA / IKTVA)
+
+تحية طيبة وبعد،،
+
+نشكركم على تقديم عرضكم للمنافسة رقم RFQ-2026-0803. بعد دراسة العرض المالي، يسرنا دعوتكم لتقديم أفضل وعرض نهائي (BAFO) وفق المحددات التالية:
+
+العرض المالي المقترح للتفاوض:
+- السعر الأساسي المقدم: ${formatCurrency(originalPrice, currency)}
+- السعر المستهدف بعد الخصم: ${formatCurrency(targetPrice, currency)} (خصم بنسبة ${requestedDiscount}%)
+- مهلة التوريد المستهدفة: ${targetLeadTime} أسابيع توريد وتسليم موقع في الرياض
+- الضمان والدعم: 5 سنوات صيانة ودعم فني بالموقع 24/7
+
+متطلبات المحتوى المحلي والامتثال:
+1. نسبة المحتوى المحلي (هيئة المحتوى المحلي والمشتريات الحكومية LCGPA): نسبة لا تقل عن 35%.
+2. معايير الهيئة العليا للأمن الصناعي (HCIS): الالتزام التام بمتطلبات الأمن والسلامة.
+3. شهادات المطابقة (SASO / CST): تقديم شهادات المطابقة لكافة أجهزة الطاقة والشبكات.
+
+نأمل تأكيد موافقتكم وتقديم العرض النهائي المحدث قبل نهاية الأسبوع الحالي.
+
+وتفضلوا بقبول خالص التحية والتقدير،،
+
+مدير إدارة المشتريات وتنمية المحتوى المحلي`;
+      }
+
+      // Default AR: BAFO Counter
+      return `إدارة المشتريات والعقود الاستراتيجية
+إدارة التوريد وسلاسل الإمداد
+التاريخ: ${today}
+المرجع: RFQ-2026-0803 / طلب تقديم أفضل وعرض نهائي (BAFO)
+
+إلى: إدارة الحسابات الكبرى – شركة ${vendorName}
+عناية: ${recipientName} المحترم
+الموضوع: دعوة لتقديم أفضل وعرض نهائي (BAFO) وخطاب التفاوض التجاري
+
+تحية طيبة وبعد،،
+
+نشكركم على استجابتكم للمنافسة رقم RFQ-2026-0803 لتوريد خوادم مركز التحكم.
+
+بعد التقييم المالي وحساب التكلفة الإجمالية للملكية (TCO)، يسعدنا إبلاغكم بأن شركة ${vendorName} من المرشحين المؤهلين للترسية، شريطة الاتفاق على البنود التجارية التالية:
+
+1. التعديل المالي المطلوب:
+   - السعر المقدم بالعرض: ${formatCurrency(originalPrice, currency)}
+   - السعر المستهدف للتفاوض: ${formatCurrency(targetPrice, currency)} (خصم مقترح: ${requestedDiscount}%)
+
+2. الالتزام بجدول التوريد:
+   - مهلة التوريد المعروضة: ${v?.leadTimeWeeks || 10} أسابيع
+   - مهلة التوريد المطلوبة للمشروع: ${targetLeadTime} أسابيع كحد أقصى
+
+3. الضمان ومستوى الخدمة (SLA):
+   - ضمان شامل لمدة 5 سنوات مع استبدال فوري لقطع الغيار.
+   - دعم فني مدار على مدار الساعة (24/7) وزمن استجابة لا يتجاوز 4 ساعات.
+   ${isFailoverUnverified ? "- تقديم الشهادة المعتمدة من المصنع لخاصية تجاوز الأعطال بدون توقف." : ""}
+
+نرجو التكرم بتقديم عرضكم النهائي المحدث تمهيداً لرفع التوصية إلى لجنة الاعتماد التنفيذية لإصدار أمر الشراء.
+
+وتفضلوا بقبول فائق الاحترام والتقدير،،
+
+فريق المشتريات والمفاوضات التجارية`;
+    }
 
     if (template === "failover_clarification") {
       return `LANTERN STRATEGIC PROCUREMENT & INFRASTRUCTURE GOVERNANCE

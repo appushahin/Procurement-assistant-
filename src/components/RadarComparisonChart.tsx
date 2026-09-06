@@ -14,11 +14,13 @@ import { VENDOR_NAMES } from "../data";
 import { calculateVendorTco } from "../utils";
 import { LanternLogo } from "./LanternLogo";
 import { Sparkles, ShieldCheck } from "lucide-react";
+import { AppLanguage, TRANSLATIONS } from "../translations";
 
 interface Props {
   data: StructuredVendorData;
   scores: VendorScores;
   binaryGates: VendorBinaryGateMap;
+  lang?: AppLanguage;
 }
 
 const VENDOR_COLORS: Record<string, { stroke: string; fill: string }> = {
@@ -27,19 +29,21 @@ const VENDOR_COLORS: Record<string, { stroke: string; fill: string }> = {
   vantage: { stroke: "#10b981", fill: "#10b981" }, // Emerald
 };
 
-export function RadarComparisonChart({ data, scores, binaryGates }: Props) {
+export function RadarComparisonChart({ data, scores, binaryGates, lang = "en" }: Props) {
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
   const vendorKeys = Object.keys(VENDOR_NAMES);
   const tcoMetrics = useMemo(() => calculateVendorTco(data, binaryGates, VENDOR_NAMES), [data, binaryGates]);
 
   const radarData = useMemo(() => {
     // 6 Dimensions to evaluate
     const dimensions = [
-      { key: "priceScore", label: "Price Competitiveness" },
-      { key: "leadScore", label: "Lead Time Speed" },
-      { key: "warrantyScore", label: "Warranty Coverage" },
-      { key: "failoverGate", label: "Failover Verification" },
-      { key: "slaScore", label: "Support SLA Depth" },
-      { key: "tcoScore", label: "5-Year TCO Efficiency" },
+      { key: "priceScore", label: isAr ? "تنافسية السعر" : "Price Competitiveness" },
+      { key: "leadScore", label: isAr ? "سرعة التوريد" : "Lead Time Speed" },
+      { key: "warrantyScore", label: isAr ? "تغطية الضمان" : "Warranty Coverage" },
+      { key: "failoverGate", label: isAr ? "بوابة تجاوز الأعطال" : "Failover Verification" },
+      { key: "slaScore", label: isAr ? "مستوى الدعم الفني" : "Support SLA Depth" },
+      { key: "tcoScore", label: isAr ? "كفاءة التكلفة الإجمالية (5 سنوات)" : "5-Year TCO Efficiency" },
     ];
 
     // Compute SLA scores
@@ -127,7 +131,13 @@ export function RadarComparisonChart({ data, scores, binaryGates }: Props) {
                 borderRadius: "12px",
                 fontSize: "12px",
                 color: "#ffffff",
+                direction: isAr ? "rtl" : "ltr",
+                textAlign: isAr ? "right" : "left",
               }}
+              formatter={(val: any, name: any) => [
+                `${val}/100`,
+                VENDOR_NAMES[String(name)] || String(name),
+              ]}
             />
             <Legend
               formatter={(value) => (

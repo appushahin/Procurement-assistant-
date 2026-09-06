@@ -284,3 +284,32 @@ export function generateFallbackRecommendation(
     ],
   };
 }
+
+/**
+ * High-precision currency formatter using Intl.NumberFormat
+ */
+export function formatCurrencyPrecise(
+  amount: number,
+  currency: "SAR" | "USD" | "EUR" = "USD",
+  decimals: number = 0
+): string {
+  if (isNaN(amount) || !isFinite(amount)) return "0 " + currency;
+
+  try {
+    if (currency === "SAR") {
+      return new Intl.NumberFormat("en-US", {
+        style: "decimal",
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      }).format(amount) + " SAR";
+    }
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency,
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(amount);
+  } catch (e) {
+    return `${Math.round(amount).toLocaleString()} ${currency}`;
+  }
+}

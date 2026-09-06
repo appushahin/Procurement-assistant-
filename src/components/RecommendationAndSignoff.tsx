@@ -19,6 +19,14 @@ import {
   Building2,
   DollarSign,
   Briefcase,
+  Mail,
+  Send,
+  ExternalLink,
+  Eye,
+  QrCode,
+  Shield,
+  Check,
+  Copy,
 } from "lucide-react";
 import {
   RecommendationResult,
@@ -31,6 +39,8 @@ import {
 import { VENDOR_NAMES } from "../data";
 import { LanternLogo } from "./LanternLogo";
 import { StatusBadge } from "./StatusBadge";
+import { AppLanguage, TRANSLATIONS } from "../translations";
+import { generateAuditProof } from "../cryptoAudit";
 
 interface Props {
   onGenerate: () => void;
@@ -48,9 +58,12 @@ interface Props {
   onExportPDF: () => void;
   onExportWord?: () => void;
   onExportPPT?: () => void;
+  onOpenOutlookMail?: () => void;
+  onOpenExportPreview?: (format?: "pdf" | "word" | "ppt" | "csv") => void;
   userRole?: UserRole;
   binaryGates?: VendorBinaryGateMap;
   scores?: VendorScores;
+  lang?: AppLanguage;
 }
 
 export function RecommendationAndSignoff({
@@ -69,15 +82,22 @@ export function RecommendationAndSignoff({
   onExportPDF,
   onExportWord,
   onExportPPT,
+  onOpenOutlookMail,
+  onOpenExportPreview,
   userRole = "Procurement Officer",
   binaryGates = {},
   scores = {},
+  lang = "en",
 }: Props) {
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [selectedOverrideVendor, setSelectedOverrideVendor] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [userName, setUserName] = useState("Senior Procurement Officer");
   const [activeTierComment, setActiveTierComment] = useState<string>("");
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [hasCopiedHash, setHasCopiedHash] = useState(false);
 
   const isReasonValid = overrideReason.trim().length >= 5;
   const isClientViewer = userRole === "Client Viewer";
@@ -91,6 +111,23 @@ export function RecommendationAndSignoff({
   const isTargetVendorGatedOut =
     binaryGates[targetVendorKey]?.failoverVerified === false ||
     binaryGates[targetVendorKey]?.complianceCertified === false;
+
+  const auditProof = React.useMemo(() => {
+    return generateAuditProof(
+      "RFQ-2026-0803",
+      targetVendorKey,
+      scores,
+      { price: 40, leadTime: 25, warranty: 20 },
+      signoff?.signoffUser || "Dr. Tariq Al-Ghamdi (VP Sourcing)",
+      signoff?.status || "APPROVED"
+    );
+  }, [targetVendorKey, scores, signoff]);
+
+  const handleCopyHash = () => {
+    navigator.clipboard.writeText(auditProof.fingerprint);
+    setHasCopiedHash(true);
+    setTimeout(() => setHasCopiedHash(false), 2000);
+  };
 
   const handleConfirmOverride = () => {
     if (!selectedOverrideVendor || !isReasonValid) return;
@@ -524,21 +561,92 @@ export function RecommendationAndSignoff({
                 </div>
               </div>
             </div>
+
+            {onOpenOutlookMail && (
+              <button
+                onClick={onOpenOutlookMail}
+                className="self-stretch sm:self-auto font-sans flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white transition-all shadow-lg shadow-blue-600/30 cursor-pointer shrink-0"
+                title="Send official award notice via Outlook Mail"
+              >
+                <Mail size={15} />
+                <span>Send via Outlook Mail</span>
+              </button>
+            )}
           </div>
         )}
+
+        {/* Cryptographic Audit Proof & Verification QR Seal Banner */}
+        <div className="mt-4 p-3.5 rounded-2xl bg-zinc-950/90 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-cyan-950/80 text-cyan-400 border border-cyan-500/30 shrink-0">
+              <Shield size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold text-white uppercase tracking-wider">
+                  Cryptographic Audit Proof & Verification Seal
+                </span>
+                <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/40 font-bold">
+                  SHA-256
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 text-zinc-400 text-[11px] font-mono">
+                <span>Fingerprint: <strong className="text-cyan-300">{auditProof.shortFingerprint}</strong></span>
+                <button
+                  onClick={handleCopyHash}
+                  className="text-zinc-500 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+                  title="Copy full 64-character SHA-256 hash"
+                >
+                  {hasCopiedHash ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                  <span>{hasCopiedHash ? "Copied" : "Copy"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowQrModal(true)}
+            className="self-start sm:self-auto font-sans flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-200 transition-all cursor-pointer shrink-0"
+          >
+            <QrCode size={14} className="text-cyan-400" />
+            <span>Inspect QR Seal</span>
+          </button>
+        </div>
 
         {/* Audit Trail & Enterprise Template Export Action Section */}
         <div className="mt-6 pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <span className="font-mono text-[11px] font-semibold text-cyan-400 uppercase tracking-wider block">
-              Enterprise Deliverables & Export
+              Enterprise Deliverables & Outlook Gateway
             </span>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Generate Ma'aden reporting standard Word (.doc) and PowerPoint (.txt/.ppt) templates or download CSV/PDF audit packages.
+              Send approval notifications via Outlook Mail, generate Ma'aden Word & PPT packages, or download CSV/PDF audit logs.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {onOpenExportPreview && (
+              <button
+                onClick={() => onOpenExportPreview("pdf")}
+                className="font-sans flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-red-600/30 via-zinc-900 to-zinc-900 hover:from-red-600/50 border border-red-500/40 text-white transition-all shadow-md hover:border-red-400 cursor-pointer"
+                title="Open Pre-Flight Overlay Preview to verify layout and key data points before final generation"
+              >
+                <Eye size={14} className="text-red-400" />
+                <span>Verify & Preview</span>
+              </button>
+            )}
+
+            {onOpenOutlookMail && (
+              <button
+                onClick={onOpenOutlookMail}
+                className="font-sans flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-md shadow-blue-600/30 cursor-pointer"
+                title="Send formal approval notification via connected Outlook Mail"
+              >
+                <Mail size={14} className="text-blue-200" />
+                <span>Outlook Mail Dispatch</span>
+              </button>
+            )}
+
             {onExportWord && (
               <button
                 onClick={onExportWord}
@@ -663,6 +771,82 @@ export function RecommendationAndSignoff({
                 className="px-4 py-2 text-xs font-mono font-bold rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-cyan-600/30 cursor-pointer"
               >
                 Submit Override
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cryptographic Proof & QR Seal Modal */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="glass-card max-w-md w-full p-6 rounded-2xl border border-cyan-500/40 bg-zinc-950 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-950/80 text-cyan-400 border border-cyan-500/30">
+                  <Shield size={18} />
+                </div>
+                <div>
+                  <h4 className="font-sans text-sm font-bold text-white">Cryptographic Audit Seal</h4>
+                  <span className="text-[10px] font-mono text-cyan-400">Deterministic SHA-256 Ledger Stamp</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            {/* QR Code SVG Display */}
+            <div className="my-5 flex flex-col items-center justify-center p-4 rounded-xl bg-zinc-900/90 border border-white/10">
+              <div
+                className="w-48 h-48 rounded-lg overflow-hidden p-2 bg-white flex items-center justify-center shadow-inner"
+                dangerouslySetInnerHTML={{ __html: auditProof.qrSvgString }}
+              />
+              <span className="text-[10px] font-mono text-zinc-400 mt-2">
+                Scan with mobile or auditor terminal to verify integrity
+              </span>
+            </div>
+
+            {/* Proof Metadata */}
+            <div className="space-y-2 text-xs font-mono bg-zinc-900/60 p-3 rounded-xl border border-white/5">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Tender RFQ:</span>
+                <span className="text-zinc-200 font-bold">{auditProof.rfqId}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Authorized Vendor:</span>
+                <span className="text-cyan-300 font-bold">{VENDOR_NAMES[auditProof.recommendedVendor] || auditProof.recommendedVendor}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Sign-Off Status:</span>
+                <span className="text-emerald-400 font-bold">{auditProof.signoffStatus}</span>
+              </div>
+              <div className="pt-2 border-t border-white/10">
+                <div className="text-[10px] text-zinc-500 mb-1 flex items-center justify-between">
+                  <span>SHA-256 Fingerprint:</span>
+                  <button
+                    onClick={handleCopyHash}
+                    className="text-cyan-400 hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    {hasCopiedHash ? <Check size={10} /> : <Copy size={10} />}
+                    <span>{hasCopiedHash ? "Copied" : "Copy Hash"}</span>
+                  </button>
+                </div>
+                <div className="p-2 rounded bg-black/60 border border-white/5 text-[10px] text-zinc-300 break-all leading-tight">
+                  {auditProof.fingerprint}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-mono font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-all shadow-md shadow-cyan-600/30 cursor-pointer"
+              >
+                Done
               </button>
             </div>
           </div>

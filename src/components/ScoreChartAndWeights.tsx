@@ -24,6 +24,7 @@ import {
 import { DecisionWeights, VendorScores, VendorBinaryGateMap } from "../types";
 import { VENDOR_NAMES } from "../data";
 import { LanternLogo } from "./LanternLogo";
+import { AppLanguage, TRANSLATIONS } from "../translations";
 
 interface Props {
   weights: DecisionWeights;
@@ -31,6 +32,7 @@ interface Props {
   scores: VendorScores;
   binaryGates: VendorBinaryGateMap;
   onToggleBinaryGate: (vendorKey: string, gateKey: "failoverVerified" | "complianceCertified") => void;
+  lang?: AppLanguage;
 }
 
 export function ScoreChartAndWeights({
@@ -39,7 +41,10 @@ export function ScoreChartAndWeights({
   scores,
   binaryGates,
   onToggleBinaryGate,
+  lang = "en",
 }: Props) {
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
   const totalWeight = weights.price + weights.leadTime + weights.warranty || 1;
 
   const chartData = Object.keys(VENDOR_NAMES).map((key) => {
@@ -78,15 +83,17 @@ export function ScoreChartAndWeights({
               <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span>
               <span className="font-mono text-[11px] uppercase tracking-wider text-red-400 font-bold bg-red-950/80 border border-red-500/40 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
                 <AlertOctagon size={12} />
-                Mandatory Binary Gatekeeper: Failover & Compliance (Strict YES / NO)
+                {isAr ? "بوابة القبول الإلزامية الثنائية: تجاوز الأعطال والامتثال (نعم / لا)" : "Mandatory Binary Gatekeeper: Failover & Compliance (Strict YES / NO)"}
               </span>
               <LanternLogo size="sm" showTagline={false} animated={true} className="hidden sm:inline-flex ml-2 opacity-90" />
             </div>
             <h3 className="font-sans text-xl font-bold text-white tracking-tight">
-              Pre-Qualification Verification Gates (Zero-Tolerance Go / No-Go)
+              {isAr ? "بوابات التحقق والتأهيل المسبق (قبول / استبعاد صارم)" : "Pre-Qualification Verification Gates (Zero-Tolerance Go / No-Go)"}
             </h3>
             <p className="text-xs text-zinc-300 mt-1 max-w-3xl">
-              Compliance and failover are <strong>strict binary gates</strong> (No sliding scale). If either check is <strong>NO</strong>, the vendor is automatically disqualified from purchase order award regardless of price.
+              {isAr
+                ? "الامتثال وتجاوز الأعطال هما بوابتان إلزاميتان (بدون تدرج). إذا كانت النتيجة لا لأي منهما، يتم استبعاد المورد تلقائياً بغض النظر عن السعر."
+                : "Compliance and failover are strict binary gates (No sliding scale). If either check is NO, the vendor is automatically disqualified from purchase order award regardless of price."}
             </p>
           </div>
         </div>

@@ -27,6 +27,7 @@ import {
 import { VENDOR_NAMES } from "../data";
 import { calculateVendorScores } from "../utils";
 import { LanternLogo } from "./LanternLogo";
+import { AppLanguage, TRANSLATIONS } from "../translations";
 
 interface Props {
   baseData: StructuredVendorData;
@@ -37,6 +38,7 @@ interface Props {
   formatCurrency: (priceUSD: number, targetCurrency: CurrencyCode) => string;
   onApplySimulatedData: (simulatedData: StructuredVendorData, simulatedGates: VendorBinaryGateMap) => void;
   onOpenLetterGenerator?: (vendorKey: string) => void;
+  lang?: AppLanguage;
 }
 
 const DEFAULT_SIMULATION: NegotiationSimMap = {
@@ -72,7 +74,10 @@ export function NegotiationSimulator({
   formatCurrency,
   onApplySimulatedData,
   onOpenLetterGenerator,
+  lang = "en",
 }: Props) {
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
   const vendorKeys = Object.keys(VENDOR_NAMES);
   const [simParams, setSimParams] = useState<NegotiationSimMap>(DEFAULT_SIMULATION);
   const [activeVendorTab, setActiveVendorTab] = useState<string>("vantage");

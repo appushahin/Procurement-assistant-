@@ -5,6 +5,7 @@ import { StructuredVendorData, VendorScores, VendorMetrics, CurrencyCode, Exchan
 import { VENDOR_NAMES } from "../data";
 import { EditVendorModal } from "./EditVendorModal";
 import { LanternLogo } from "./LanternLogo";
+import { AppLanguage, TRANSLATIONS } from "../translations";
 
 interface Props {
   data: StructuredVendorData;
@@ -13,6 +14,7 @@ interface Props {
   onUpdateVendorData?: (vendorKey: string, updatedMetrics: VendorMetrics) => void;
   binaryGates?: VendorBinaryGateMap;
   onToggleBinaryGate?: (vendorKey: string, gateKey: "failoverVerified" | "complianceCertified") => void;
+  lang?: AppLanguage;
 }
 
 export function StandardizedLedgerTable({
@@ -22,10 +24,14 @@ export function StandardizedLedgerTable({
   onUpdateVendorData,
   binaryGates = {},
   onToggleBinaryGate,
+  lang = "en",
 }: Props) {
   const vendorKeys = Object.keys(VENDOR_NAMES);
   const [viewMode, setViewMode] = useState<"ranked" | "matrix" | "split">("ranked");
   const [editingVendorKey, setEditingVendorKey] = useState<string | null>(null);
+
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
 
   // Multi-Currency & Automated Exchange Rate State
   const [currency, setCurrency] = useState<CurrencyCode>("SAR");
@@ -125,19 +131,19 @@ export function StandardizedLedgerTable({
           <div className="flex items-center gap-2 mb-1.5">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
             <span className="font-mono text-[11px] uppercase tracking-wider text-cyan-300 font-semibold bg-cyan-950/60 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
-              Step 2: Normalized Procurement Ledger
+              {isAr ? "الخطوة 2: جدول المقارنة المعياري الموحد" : "Step 2: Normalized Procurement Ledger"}
             </span>
             <LanternLogo size="sm" showTagline={false} animated={true} className="hidden sm:inline-flex ml-2 opacity-90" />
           </div>
           <h3 className="font-sans text-xl font-bold text-white tracking-tight mt-0.5">
-            Standardized Vendor Comparison
+            {isAr ? "مقارنة عروض الموردين المعيارية" : "Standardized Vendor Comparison"}
           </h3>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-between lg:justify-end">
           {isSimulated && (
             <span className="font-mono text-xs px-2.5 py-1 rounded-full bg-zinc-900 text-zinc-300 border border-white/10">
-              Offline Mode — Standardized locally
+              {isAr ? "الوضع غير المتصل — تمت المعايرة محلياً" : "Offline Mode — Standardized locally"}
             </span>
           )}
 
@@ -152,7 +158,7 @@ export function StandardizedLedgerTable({
               }`}
             >
               <ListOrdered size={14} />
-              <span>Ranked Rows</span>
+              <span>{isAr ? "الترتيب حسب النقاط" : "Ranked Rows"}</span>
             </button>
 
             <button
@@ -164,7 +170,7 @@ export function StandardizedLedgerTable({
               }`}
             >
               <LayoutGrid size={14} />
-              <span>Full Matrix</span>
+              <span>{isAr ? "المصفوفة الكاملة" : "Full Matrix"}</span>
             </button>
 
             <button
@@ -176,7 +182,7 @@ export function StandardizedLedgerTable({
               }`}
             >
               <Columns size={14} />
-              <span>Split-Screen</span>
+              <span>{isAr ? "مقارنة ثنائية متوازية" : "Split-Screen"}</span>
             </button>
           </div>
         </div>
@@ -254,7 +260,7 @@ export function StandardizedLedgerTable({
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs font-mono text-zinc-400 bg-zinc-950/60 p-3 rounded-xl border border-white/10">
             <div className="flex items-center gap-2 text-zinc-300 font-semibold">
-              <Sparkles size={14} className="text-red-400 animate-pulse" />
+              <Sparkles size={14} className="text-cyan-400 animate-pulse" />
               <span>Smooth Dynamic Reordering: Sorted by weighted score.</span>
             </div>
             <span className="text-[11px] text-zinc-500 font-normal hidden sm:inline">
@@ -274,12 +280,14 @@ export function StandardizedLedgerTable({
                   <motion.div
                     key={key}
                     layout
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
+                    initial={{ opacity: 0, x: -24, filter: "blur(4px)" }}
+                    animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                    exit={{ opacity: 0, scale: 0.95, filter: "blur(2px)" }}
                     transition={{
-                      layout: { type: "spring", stiffness: 320, damping: 26 },
-                      opacity: { duration: 0.2 },
+                      layout: { type: "spring", stiffness: 350, damping: 28 },
+                      opacity: { duration: 0.35, delay: index * 0.06 },
+                      x: { type: "spring", stiffness: 280, damping: 24, delay: index * 0.06 },
+                      filter: { duration: 0.25, delay: index * 0.06 },
                     }}
                     className={`glass-card p-4 rounded-2xl border transition-all ${
                       isWinner
@@ -392,18 +400,18 @@ export function StandardizedLedgerTable({
 
           {/* DESKTOP / TABLET TABLE VIEW (sm+ screens) */}
           <div className="hidden sm:block overflow-x-auto rounded-xl border border-white/10 shadow-2xl">
-            <table className="w-full text-left text-xs font-mono border-collapse min-w-[750px]">
+            <table className={`w-full text-xs font-mono border-collapse min-w-[750px] ${isAr ? "text-right" : "text-left"}`}>
               <thead>
                 <tr className="border-b border-white/10 text-zinc-400 bg-zinc-950/90 uppercase tracking-wider text-[11px]">
-                  <th className="py-3.5 px-4 font-semibold w-16">Rank</th>
-                  <th className="py-3.5 px-4 font-semibold">Vendor Name</th>
-                  <th className="py-3.5 px-4 font-semibold">Weighted Score</th>
-                  <th className="py-3.5 px-4 font-semibold">Price ({currency})</th>
-                  <th className="py-3.5 px-4 font-semibold">Lead Time</th>
-                  <th className="py-3.5 px-4 font-semibold">Warranty</th>
-                  <th className="py-3.5 px-4 font-semibold">Failover Gate</th>
-                  <th className="py-3.5 px-4 font-semibold">Compliance Gate</th>
-                  <th className="py-3.5 px-4 font-semibold text-right">Actions</th>
+                  <th className="py-3.5 px-4 font-semibold w-16">{isAr ? "الترتيب" : "Rank"}</th>
+                  <th className="py-3.5 px-4 font-semibold">{isAr ? "اسم المورد" : "Vendor Name"}</th>
+                  <th className="py-3.5 px-4 font-semibold">{isAr ? "الدرجة الموزونة" : "Weighted Score"}</th>
+                  <th className="py-3.5 px-4 font-semibold">{isAr ? `السعر (${currency})` : `Price (${currency})`}</th>
+                  <th className="py-3.5 px-4 font-semibold">{isAr ? "مدة التوريد" : "Lead Time"}</th>
+                  <th className="py-3.5 px-4 font-semibold">{isAr ? "فترة الضمان" : "Warranty"}</th>
+                  <th className="py-3.5 px-4 font-semibold">{isAr ? "بوابة تجاوز الأعطال" : "Failover Gate"}</th>
+                  <th className="py-3.5 px-4 font-semibold">{isAr ? "بوابة الامتثال" : "Compliance Gate"}</th>
+                  <th className={`py-3.5 px-4 font-semibold ${isAr ? "text-left" : "text-right"}`}>{isAr ? "الإجراءات" : "Actions"}</th>
                 </tr>
               </thead>
               <motion.tbody layout className="divide-y divide-white/5 bg-zinc-900/40">
@@ -422,12 +430,14 @@ export function StandardizedLedgerTable({
                       <motion.tr
                         key={key}
                         layout
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
+                        initial={{ opacity: 0, x: -20, filter: "blur(4px)" }}
+                        animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                        exit={{ opacity: 0, scale: 0.95, filter: "blur(2px)" }}
                         transition={{
-                          layout: { type: "spring", stiffness: 320, damping: 26 },
-                          opacity: { duration: 0.2 }
+                          layout: { type: "spring", stiffness: 350, damping: 28 },
+                          opacity: { duration: 0.35, delay: index * 0.05 },
+                          x: { type: "spring", stiffness: 280, damping: 24, delay: index * 0.05 },
+                          filter: { duration: 0.25, delay: index * 0.05 },
                         }}
                         className={`group hover:bg-white/5 transition-colors ${
                           isDisqualified
@@ -628,7 +638,12 @@ export function StandardizedLedgerTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 bg-zinc-900/40">
-              <tr className="hover:bg-white/5 transition-colors">
+              <motion.tr
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.04 }}
+                className="hover:bg-white/5 transition-colors"
+              >
                 <td className="py-3.5 px-4 font-sans font-medium text-zinc-300 flex items-center gap-2">
                   <DollarSign size={14} className="text-red-400" />
                   Price (Total {currency})
@@ -652,9 +667,14 @@ export function StandardizedLedgerTable({
                     </td>
                   );
                 })}
-              </tr>
+              </motion.tr>
 
-              <tr className="hover:bg-white/5 transition-colors">
+              <motion.tr
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.08 }}
+                className="hover:bg-white/5 transition-colors"
+              >
                 <td className="py-3.5 px-4 font-sans font-medium text-zinc-300 flex items-center gap-2">
                   <Clock size={14} className="text-red-400" />
                   Lead Time (Weeks)
@@ -667,9 +687,14 @@ export function StandardizedLedgerTable({
                     </td>
                   );
                 })}
-              </tr>
+              </motion.tr>
 
-              <tr className="hover:bg-white/5 transition-colors">
+              <motion.tr
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.12 }}
+                className="hover:bg-white/5 transition-colors"
+              >
                 <td className="py-3.5 px-4 font-sans font-medium text-zinc-300 flex items-center gap-2">
                   <Shield size={14} className="text-red-400" />
                   Warranty (Years)
@@ -682,9 +707,14 @@ export function StandardizedLedgerTable({
                     </td>
                   );
                 })}
-              </tr>
+              </motion.tr>
 
-              <tr className="hover:bg-white/5 transition-colors">
+              <motion.tr
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.16 }}
+                className="hover:bg-white/5 transition-colors"
+              >
                 <td className="py-3.5 px-4 font-sans font-medium text-zinc-300 flex items-center gap-2">
                   <CheckCircle2 size={14} className="text-red-400" />
                   Failover Pre-Certified
@@ -705,18 +735,28 @@ export function StandardizedLedgerTable({
                     </td>
                   );
                 })}
-              </tr>
+              </motion.tr>
 
-              <tr className="hover:bg-white/5 transition-colors">
+              <motion.tr
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.20 }}
+                className="hover:bg-white/5 transition-colors"
+              >
                 <td className="py-3.5 px-4 font-sans font-medium text-zinc-300">Support SLA</td>
                 {sortedVendorKeys.map((key) => (
                   <td key={key} className="py-3.5 px-4 text-xs text-zinc-300 leading-relaxed">
                     {data[key]?.supportSLA || "—"}
                   </td>
                 ))}
-              </tr>
+              </motion.tr>
 
-              <tr className="hover:bg-white/5 transition-colors">
+              <motion.tr
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.24 }}
+                className="hover:bg-white/5 transition-colors"
+              >
                 <td className="py-3.5 px-4 font-sans font-medium text-zinc-300 flex items-center gap-2">
                   <Award size={14} className="text-red-400" />
                   Certifications
@@ -732,19 +772,29 @@ export function StandardizedLedgerTable({
                     </div>
                   </td>
                 ))}
-              </tr>
+              </motion.tr>
 
-              <tr className="hover:bg-white/5 transition-colors">
+              <motion.tr
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.28 }}
+                className="hover:bg-white/5 transition-colors"
+              >
                 <td className="py-3.5 px-4 font-sans font-medium text-zinc-300">Key Config Specs</td>
                 {sortedVendorKeys.map((key) => (
                   <td key={key} className="py-3.5 px-4 text-xs text-zinc-400 leading-normal italic">
                     {data[key]?.specsSummary || "—"}
                   </td>
                 ))}
-              </tr>
+              </motion.tr>
 
               {/* Score Breakdown Rows */}
-              <tr className="bg-zinc-950/90 font-bold border-t-2 border-white/10">
+              <motion.tr
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.35, delay: 0.32 }}
+                className="bg-zinc-950/90 font-bold border-t-2 border-white/10"
+              >
                 <td className="py-4 px-4 text-sm font-sans text-white">
                   Weighted Total Score (0-100)
                 </td>
@@ -765,9 +815,9 @@ export function StandardizedLedgerTable({
                     </td>
                   );
                 })}
-              </tr>
+              </motion.tr>
             </tbody>
-          </table>
+            </table>
         </div>
       )}
 
@@ -820,6 +870,9 @@ export function StandardizedLedgerTable({
             {/* Vendor A Card */}
             <motion.div
               layout
+              initial={{ opacity: 0, x: -24, filter: "blur(3px)" }}
+              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+              transition={{ duration: 0.35, ease: [0.25, 1, 0.5, 1] }}
               className={`glass-card-interactive rounded-2xl border p-5 shadow-2xl space-y-4 ${
                 (scoreA?.weighted || 0) >= (scoreB?.weighted || 0)
                   ? "border-red-500/50 bg-red-950/20 ring-1 ring-red-500/30"
@@ -951,6 +1004,9 @@ export function StandardizedLedgerTable({
             {/* Vendor B Card */}
             <motion.div
               layout
+              initial={{ opacity: 0, x: 24, filter: "blur(3px)" }}
+              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+              transition={{ duration: 0.35, ease: [0.25, 1, 0.5, 1], delay: 0.08 }}
               className={`glass-card-interactive rounded-2xl border p-5 shadow-2xl space-y-4 ${
                 (scoreB?.weighted || 0) >= (scoreA?.weighted || 0)
                   ? "border-red-500/50 bg-red-950/20 ring-1 ring-red-500/30"

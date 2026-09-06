@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { CheckCircle2, FileText, RefreshCw, AlertTriangle, ChevronDown, Award, ShieldCheck, Upload, HardDrive, Mail, FileCheck2, Sparkles } from "lucide-react";
+import { CheckCircle2, FileText, RefreshCw, AlertTriangle, Upload, HardDrive, Mail, Sparkles } from "lucide-react";
 import { VendorRawQuotes, VendorMetrics } from "../types";
 import { VENDOR_NAMES } from "../data";
 import { LanternLogo } from "./LanternLogo";
 import { DocumentParserModal } from "./DocumentParserModal";
+import { AppLanguage, TRANSLATIONS } from "../translations";
 
 interface Props {
   quotes: VendorRawQuotes;
@@ -12,12 +13,16 @@ interface Props {
   isStandardizing: boolean;
   error: string | null;
   onApplyParsedProposal?: (vendorKey: string, metrics: VendorMetrics, rawQuoteText: string) => void;
+  lang?: AppLanguage;
 }
 
-export function QuoteInputSection({ quotes, setQuotes, onStandardize, isStandardizing, error, onApplyParsedProposal }: Props) {
+export function QuoteInputSection({ quotes, setQuotes, onStandardize, isStandardizing, error, onApplyParsedProposal, lang = "en" }: Props) {
   const [activeTab, setActiveTab] = useState<string>("meridian");
   const [isParserOpen, setIsParserOpen] = useState<boolean>(false);
   const [lastParsedInfo, setLastParsedInfo] = useState<{ vendorName: string; time: string } | null>(null);
+
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
 
   const handleApplyProposalFromModal = (vendorKey: string, metrics: VendorMetrics, rawQuoteText: string) => {
     // 1. Update raw quote text state
@@ -49,19 +54,21 @@ export function QuoteInputSection({ quotes, setQuotes, onStandardize, isStandard
           <div className="flex flex-wrap items-center gap-2 mb-1.5">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
             <span className="font-mono text-[11px] uppercase tracking-wider text-red-400 font-semibold bg-red-950/50 border border-red-500/30 px-2.5 py-0.5 rounded-full">
-              Step 1: Input & Parse Quotations
+              {isAr ? "الخطوة 1: إدخال وتحليل عروض الأسعار" : "Step 1: Input & Parse Quotations"}
             </span>
             <span className="font-mono text-[10px] bg-zinc-900 text-zinc-300 border border-white/10 px-2 py-0.5 rounded-md flex items-center gap-1">
               <HardDrive size={11} className="text-red-400" />
-              <span>PC System Integration</span>
+              <span>{isAr ? "تكامل النظام المكتبي" : "PC System Integration"}</span>
             </span>
             <LanternLogo size="sm" showTagline={false} animated={true} className="hidden sm:inline-flex ml-2 opacity-90" />
           </div>
           <h2 className="font-sans text-xl font-bold text-white tracking-tight">
-            Vendor Proposals, PDF Files & Email Parser
+            {isAr ? "عروض الموردين، ملفات PDF ومحلل رسائل البريد الإلكتروني" : "Vendor Proposals, PDF Files & Email Parser"}
           </h2>
           <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-            Upload PDF proposals or email files directly from your PC system, or edit raw quotation texts below.
+            {isAr
+              ? "قم برفع عروض PDF أو رسائل البريد الإلكتروني مباشرة من جهازك، أو عدّل نصوص عروض الأسعار أدناه."
+              : "Upload PDF proposals or email files directly from your PC system, or edit raw quotation texts below."}
           </p>
         </div>
 
@@ -71,7 +78,7 @@ export function QuoteInputSection({ quotes, setQuotes, onStandardize, isStandard
             className="font-sans flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs text-white bg-zinc-900 hover:bg-zinc-800 border border-red-500/40 hover:border-red-400 transition-all shadow-md shadow-red-950/40 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
           >
             <Upload size={15} className="text-red-400" />
-            <span>Upload PDF / Email / Manual Input</span>
+            <span>{isAr ? "رفع PDF / بريد إلكتروني / إدخال يدوي" : "Upload PDF / Email / Manual Input"}</span>
           </button>
 
           <button
@@ -82,12 +89,12 @@ export function QuoteInputSection({ quotes, setQuotes, onStandardize, isStandard
             {isStandardizing ? (
               <>
                 <RefreshCw size={15} className="animate-spin text-white" />
-                <span>Extracting Data...</span>
+                <span>{isAr ? "جارٍ استخراج وتوحيد البيانات..." : "Extracting Data..."}</span>
               </>
             ) : (
               <>
                 <RefreshCw size={15} />
-                <span>Standardize Quotations</span>
+                <span>{isAr ? "توحيد ومعايرة عروض الأسعار" : "Standardize Quotations"}</span>
               </>
             )}
           </button>
@@ -100,14 +107,17 @@ export function QuoteInputSection({ quotes, setQuotes, onStandardize, isStandard
           <div className="flex items-center gap-2">
             <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
             <span>
-              <strong>Document Parsed:</strong> Successfully ingested proposal for <span className="underline">{lastParsedInfo.vendorName}</span> into the procurement ledger at {lastParsedInfo.time}.
+              <strong>{isAr ? "تم التحليل بنجاح:" : "Document Parsed:"}</strong>{" "}
+              {isAr
+                ? `تم استيراد عرض ${lastParsedInfo.vendorName} بنجاح إلى جدول المقارنة في ${lastParsedInfo.time}.`
+                : `Successfully ingested proposal for ${lastParsedInfo.vendorName} into the procurement ledger at ${lastParsedInfo.time}.`}
             </span>
           </div>
           <button
             onClick={() => setLastParsedInfo(null)}
             className="text-xs text-emerald-400 hover:text-white cursor-pointer ml-2 underline"
           >
-            Dismiss
+            {isAr ? "إغلاق" : "Dismiss"}
           </button>
         </div>
       )}
@@ -122,28 +132,28 @@ export function QuoteInputSection({ quotes, setQuotes, onStandardize, isStandard
       {/* Quick Action Badges Bar */}
       <div className="mb-4 flex flex-wrap items-center gap-2 bg-zinc-950/60 p-2.5 rounded-xl border border-white/10">
         <span className="text-[10px] font-mono text-zinc-400 font-semibold uppercase tracking-wider mr-1">
-          Inspiration Sources:
+          {isAr ? "مصادر الإدخال:" : "Inspiration Sources:"}
         </span>
         <button
           onClick={() => setIsParserOpen(true)}
           className="text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
         >
           <FileText size={12} className="text-red-400" />
-          <span>Upload PDF Spec Sheet</span>
+          <span>{isAr ? "رفع مواصفات PDF" : "Upload PDF Spec Sheet"}</span>
         </button>
         <button
           onClick={() => setIsParserOpen(true)}
           className="text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
         >
           <Mail size={12} className="text-rose-400" />
-          <span>Paste Vendor Email (.eml)</span>
+          <span>{isAr ? "لصق بريد المورد (.eml)" : "Paste Vendor Email (.eml)"}</span>
         </button>
         <button
           onClick={() => setIsParserOpen(true)}
           className="text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
         >
           <Sparkles size={12} className="text-emerald-400" />
-          <span>Direct Manual Proposal Entry</span>
+          <span>{isAr ? "إدخال مباشر للعرض" : "Direct Manual Proposal Entry"}</span>
         </button>
       </div>
 
@@ -191,7 +201,11 @@ export function QuoteInputSection({ quotes, setQuotes, onStandardize, isStandard
                     [key]: e.target.value,
                   }))
                 }
-                placeholder={`Paste raw quotation text for ${VENDOR_NAMES[key]}...`}
+                placeholder={
+                  isAr
+                    ? `الصق نص عرض السعر لـ ${VENDOR_NAMES[key]}...`
+                    : `Paste raw quotation text for ${VENDOR_NAMES[key]}...`
+                }
               />
             </div>
           );

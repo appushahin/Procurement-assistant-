@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   AlertTriangle,
   ShieldAlert,
@@ -20,15 +20,24 @@ import {
   X,
   FileText,
   AlertOctagon,
-  ArrowRight
+  ArrowRight,
+  Bell,
+  History,
+  Sparkles,
+  Flame,
+  Volume2,
+  Trash2,
 } from "lucide-react";
-import { StructuredVendorData, VendorMetrics } from "../types";
+import { StructuredVendorData, VendorMetrics, RiskAlertNotification, RiskAlertSeverity } from "../types";
 import { VENDOR_NAMES } from "../data";
 import { LanternLogo } from "./LanternLogo";
 import { StatusBadge } from "./StatusBadge";
+import { RiskAlertToastStack } from "./RiskAlertToastStack";
+import { AppLanguage, TRANSLATIONS } from "../translations";
 
 interface RiskAssessmentHeatmapProps {
   data: StructuredVendorData;
+  lang?: AppLanguage;
 }
 
 export type RiskLevel = "low" | "medium" | "high";
@@ -215,11 +224,14 @@ export function evaluateVendorMetricRisks(
   return results;
 }
 
-export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
+export function RiskAssessmentHeatmap({ data, lang = "en" }: RiskAssessmentHeatmapProps) {
   const [selectedPreset, setSelectedPreset] = useState<string>("standard");
   const [thresholds, setThresholds] = useState<RiskThresholds>(PRESET_THRESHOLDS.standard.thresholds);
   const [showConfig, setShowConfig] = useState<boolean>(false);
   const [filterSeverity, setFilterSeverity] = useState<"all" | "high" | "medium_high">("all");
+
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
 
   // Requirement #9: Outlier details drawer state
   const [activeOutlierDrawer, setActiveOutlierDrawer] = useState<{
@@ -228,6 +240,18 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
     metricKey: string;
     risk: MetricRiskResult;
   } | null>(null);
+
+  // Local State-Based Notification System for Risk Assessment Threshold Alerts
+  const [alertThreshold, setAlertThreshold] = useState<number>(50);
+  const [enableAlerts, setEnableAlerts] = useState<boolean>(true);
+  const [enableRecoveryAlerts, setEnableRecoveryAlerts] = useState<boolean>(true);
+  const [activeAlerts, setActiveAlerts] = useState<RiskAlertNotification[]>([]);
+  const [alertHistory, setAlertHistory] = useState<RiskAlertNotification[]>([]);
+  const [showAlertHistoryDrawer, setShowAlertHistoryDrawer] = useState<boolean>(false);
+  const [highlightedVendorKey, setHighlightedVendorKey] = useState<string | null>(null);
+
+  const prevCompositeScoresRef = useRef<Record<string, number>>({});
+  const isInitialMountRef = useRef<boolean>(true);
 
   const vendorKeys = Object.keys(VENDOR_NAMES);
 
@@ -319,6 +343,173 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
     return scoresMap;
   }, [vendorRisks]);
 
+  // Alert Trigger Monitor: Watches for vendor composite score crossing alertThreshold during parameter adjustment
+  useEffect(() => {
+    if (!compositeVendorRisk || Object.keys(compositeVendorRisk).length === 0) return;
+
+    // Skip trigger on the initial mount so initial render doesn't fire spurious toasts
+    if (isInitialMountRef.current) {
+      const initialMap: Record<string, number> = {};
+      Object.keys(compositeVendorRisk).forEach((vk) => {
+        initialMap[vk] = compositeVendorRisk[vk].score;
+      });
+      prevCompositeScoresRef.current = initialMap;
+      isInitialMountRef.current = false;
+      return;
+    }
+
+    if (!enableAlerts) {
+      const currentMap: Record<string, number> = {};
+      Object.keys(compositeVendorRisk).forEach((vk) => {
+        currentMap[vk] = compositeVendorRisk[vk].score;
+      });
+      prevCompositeScoresRef.current = currentMap;
+      return;
+    }
+
+    const newAlerts: RiskAlertNotification[] = [];
+    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+    Object.keys(compositeVendorRisk).forEach((vk) => {
+      const prevScore = prevCompositeScoresRef.current[vk] ?? 0;
+      const currentObj = compositeVendorRisk[vk];
+      const newScore = currentObj.score;
+      const vendorName = VENDOR_NAMES[vk] || vk;
+      const vr = vendorRisks[vk] || {};
+
+      // Gather flagged metrics
+      const flaggedMetrics: string[] = [];
+      Object.keys(vr).forEach((mk) => {
+        if (vr[mk].riskLevel === "high") {
+          flaggedMetrics.push(`${vr[mk].metricName} (${vr[mk].valueDisplay})`);
+        }
+      });
+
+      // 1. Threshold Crossing: transitioned from below threshold to at or above threshold
+      if (prevScore < alertThreshold && newScore >= alertThreshold) {
+        const severity: RiskAlertSeverity = newScore >= 75 ? "critical" : "warning";
+        const primaryReason =
+          flaggedMetrics.length > 0
+            ? `Critical variances in ${flaggedMetrics.join(", ")}`
+            : `Composite score reached ${newScore} pts, exceeding the ${alertThreshold} pt safety ceiling.`;
+
+        newAlerts.push({
+          id: `alert-${Date.now()}-${vk}-${Math.random().toString(36).substring(2, 6)}`,
+          vendorKey: vk,
+          vendorName,
+          severity,
+          title: `Risk Threshold Breach: ${vendorName}`,
+          message: `Composite risk score elevated from ${prevScore} to ${newScore} pts (Threshold: ${alertThreshold} pts). Parameter changes triggered risk threshold crossing.`,
+          oldScore: prevScore,
+          newScore,
+          threshold: alertThreshold,
+          timestamp,
+          breachReason: primaryReason,
+          flaggedMetrics: flaggedMetrics.slice(0, 3),
+        });
+      }
+      // 2. High Risk Score Escalation: already above threshold, but surged by +15 or more
+      else if (prevScore >= alertThreshold && newScore >= alertThreshold && newScore > prevScore + 15) {
+        newAlerts.push({
+          id: `alert-${Date.now()}-${vk}-${Math.random().toString(36).substring(2, 6)}`,
+          vendorKey: vk,
+          vendorName,
+          severity: "critical",
+          title: `Risk Severity Escalated: ${vendorName}`,
+          message: `Risk score surged by +${newScore - prevScore} pts (now ${newScore} pts). Adjusted parameters exacerbated benchmark outliers.`,
+          oldScore: prevScore,
+          newScore,
+          threshold: alertThreshold,
+          timestamp,
+          breachReason: flaggedMetrics.join(", ") || "Severe outlier escalation.",
+          flaggedMetrics: flaggedMetrics.slice(0, 3),
+        });
+      }
+      // 3. Recovery Crossing: transitioned from at/above threshold to safely below threshold
+      else if (enableRecoveryAlerts && prevScore >= alertThreshold && newScore < alertThreshold) {
+        newAlerts.push({
+          id: `alert-${Date.now()}-${vk}-${Math.random().toString(36).substring(2, 6)}`,
+          vendorKey: vk,
+          vendorName,
+          severity: "info",
+          title: `Risk Threshold Normalization: ${vendorName}`,
+          message: `Risk score decreased from ${prevScore} to ${newScore} pts, safely dipping below the ${alertThreshold} pt threshold.`,
+          oldScore: prevScore,
+          newScore,
+          threshold: alertThreshold,
+          timestamp,
+          breachReason: "Vendor metrics now satisfy updated benchmark guidelines.",
+        });
+      }
+    });
+
+    if (newAlerts.length > 0) {
+      setActiveAlerts((prev) => [...newAlerts, ...prev].slice(0, 4));
+      setAlertHistory((prev) => [...newAlerts, ...prev].slice(0, 30));
+    }
+
+    // Update previous scores ref
+    const updatedMap: Record<string, number> = {};
+    Object.keys(compositeVendorRisk).forEach((vk) => {
+      updatedMap[vk] = compositeVendorRisk[vk].score;
+    });
+    prevCompositeScoresRef.current = updatedMap;
+  }, [compositeVendorRisk, alertThreshold, enableAlerts, enableRecoveryAlerts, vendorRisks]);
+
+  const handleDismissAlert = (id: string) => {
+    setActiveAlerts((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const handleDismissAllAlerts = () => {
+    setActiveAlerts([]);
+  };
+
+  const handleInspectVendor = (vendorKey: string) => {
+    setHighlightedVendorKey(vendorKey);
+    setTimeout(() => {
+      setHighlightedVendorKey(null);
+    }, 4500);
+
+    const vkRisks = vendorRisks[vendorKey];
+    if (vkRisks) {
+      const highMetric = Object.keys(vkRisks).find((mk) => vkRisks[mk].riskLevel === "high") || Object.keys(vkRisks)[0];
+      if (highMetric) {
+        setActiveOutlierDrawer({
+          vendorKey,
+          vendorName: VENDOR_NAMES[vendorKey] || vendorKey,
+          metricKey: highMetric,
+          risk: vkRisks[highMetric],
+        });
+      }
+    }
+  };
+
+  // Test / Simulate Alert Trigger
+  const handleTriggerSimulatedAlert = () => {
+    const vk = "ironclad";
+    const currentScore = compositeVendorRisk[vk]?.score ?? 60;
+    const testNewScore = Math.max(alertThreshold + 20, currentScore);
+    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+    const simAlert: RiskAlertNotification = {
+      id: `alert-sim-${Date.now()}`,
+      vendorKey: vk,
+      vendorName: VENDOR_NAMES[vk] || "Ironclad Solutions",
+      severity: "critical",
+      title: `Simulated Alert: Ironclad Solutions Threshold Breach`,
+      message: `Parameter tuning caused risk score to cross pre-defined threshold (${alertThreshold} pts) with score reaching ${testNewScore} pts.`,
+      oldScore: Math.max(10, alertThreshold - 15),
+      newScore: testNewScore,
+      threshold: alertThreshold,
+      timestamp,
+      breachReason: "Simulated parameter adjustment test.",
+      flaggedMetrics: ["Price USD (+$16,500)", "Lead Time (12 Wks)"],
+    };
+
+    setActiveAlerts((prev) => [simAlert, ...prev].slice(0, 4));
+    setAlertHistory((prev) => [simAlert, ...prev].slice(0, 30));
+  };
+
   const criteriaList = [
     { key: "price", label: "Total Price (USD)", icon: DollarSign },
     { key: "leadTime", label: "Lead Time (Weeks)", icon: Clock },
@@ -341,30 +532,47 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
             </span>
             <span className="font-mono text-[11px] uppercase tracking-wider text-cyan-300 font-semibold bg-cyan-950/60 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
-              Step 3: Industry Threshold Risk Assessment
+              {isAr ? "الخطوة 3: تقييم مخاطر المؤشرات المعيارية" : "Step 3: Industry Threshold Risk Assessment"}
             </span>
             <LanternLogo size="sm" showTagline={false} animated={true} className="hidden sm:inline-flex ml-2 opacity-90" />
           </div>
           <h3 className="font-sans text-xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-            <span>Risk Heatmap & Outlier Detection</span>
+            <span>{isAr ? "الخريطة الحرارية للمخاطر واكتشاف القيم الشاذة" : "Risk Heatmap & Outlier Detection"}</span>
             {highRiskCount > 0 && (
-              <StatusBadge status="high" label={`${highRiskCount} Outliers Flagged`} size="sm" />
+              <StatusBadge status="high" label={isAr ? `تم رصد ${highRiskCount} مخاطر مرتفعة` : `${highRiskCount} Outliers Flagged`} size="sm" />
             )}
           </h3>
           <p className="text-xs text-zinc-400 mt-1 max-w-2xl leading-relaxed">
-            Evaluates vendor metrics against pre-defined industry benchmarks to instantly surface delivery bottlenecks, cost overruns, and compliance exceptions.
+            {isAr
+              ? "يقوم بتقييم مقاييس الموردين مقابل المعايير المرجعية لرصد اختناقات التوريد، وتجاوز التكاليف، واستثناءات الامتثال فوراً."
+              : "Evaluates vendor metrics against pre-defined industry benchmarks to instantly surface delivery bottlenecks, cost overruns, and compliance exceptions."}
           </p>
         </div>
 
         {/* Controls Toolbar */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Real-time Alert Toast Status & History Button */}
+          <button
+            onClick={() => setShowAlertHistoryDrawer(true)}
+            className="flex items-center gap-1.5 bg-zinc-950/80 hover:bg-zinc-900 border border-white/10 hover:border-cyan-500/40 text-zinc-300 hover:text-white px-3 py-2 rounded-xl text-xs font-mono transition-all shadow-md cursor-pointer"
+            title="View triggered risk threshold alerts log"
+          >
+            <Bell size={14} className={alertHistory.length > 0 ? "text-amber-400 animate-bounce" : "text-zinc-400"} />
+            <span className="font-semibold">{isAr ? "سجل التنبيهات" : "Alerts Log"}</span>
+            {alertHistory.length > 0 && (
+              <span className="bg-rose-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono">
+                {alertHistory.length}
+              </span>
+            )}
+          </button>
+
           {/* Preset Selector */}
           <div className="flex items-center gap-1.5 bg-zinc-950/80 border border-white/10 rounded-xl p-1 backdrop-blur-md">
-            <span className="text-[11px] font-mono text-zinc-400 pl-2">Preset:</span>
+            <span className="text-[11px] font-mono text-zinc-400 pl-2">{isAr ? "النموذج المسبق:" : "Preset:"}</span>
             <select
               value={selectedPreset}
               onChange={(e) => handlePresetChange(e.target.value)}
-              className="bg-zinc-900 text-xs font-mono font-semibold text-white px-2.5 py-1.5 rounded-lg border border-white/10 focus:ring-2 focus:ring-cyan-500 outline-none"
+              className="bg-zinc-900 text-xs font-mono font-semibold text-white px-2.5 py-1.5 rounded-lg border border-white/10 focus:ring-2 focus:ring-cyan-500 outline-none cursor-pointer"
             >
               {Object.keys(PRESET_THRESHOLDS).map((k) => (
                 <option key={k} value={k}>
@@ -384,7 +592,7 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
             }`}
           >
             <SlidersHorizontal size={14} className={showConfig ? "text-white" : "text-cyan-400"} />
-            <span>Customize Thresholds</span>
+            <span>Customize Thresholds & Alerts</span>
             {showConfig ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
@@ -393,7 +601,7 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
       {/* Expandable Custom Threshold Tuning Panel */}
       {showConfig && (
         <div className="mb-6 p-4 rounded-2xl bg-zinc-950/90 border border-cyan-500/30 shadow-2xl animate-fadeIn space-y-4">
-          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/10 pb-2 gap-2">
             <div className="flex items-center gap-2">
               <SlidersHorizontal size={16} className="text-cyan-400" />
               <h4 className="font-mono text-xs font-bold text-white uppercase tracking-wider">
@@ -401,7 +609,7 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
               </h4>
             </div>
             <span className="text-[11px] font-mono text-zinc-400 italic">
-              Changes instantly update risk colors below
+              Parameter changes instantly evaluate risks & trigger toast notifications on breaches
             </span>
           </div>
 
@@ -476,12 +684,118 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
                   type="checkbox"
                   checked={thresholds.requirePreCertification}
                   onChange={(e) => setThresholds({ ...thresholds, requirePreCertification: e.target.checked })}
-                  className="w-4 h-4 text-cyan-600 bg-zinc-800 border-white/20 rounded focus:ring-cyan-500"
+                  className="w-4 h-4 text-cyan-600 bg-zinc-800 border-white/20 rounded focus:ring-cyan-500 cursor-pointer"
                 />
                 <span className="text-zinc-200 text-xs">
                   Strictly Require Pre-certified Redundancy
                 </span>
               </label>
+            </div>
+          </div>
+
+          {/* Sub-Section: Local State-Based Real-Time Alert Toast Notification Settings */}
+          <div className="pt-3 border-t border-white/10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bell size={15} className="text-amber-400" />
+                <h5 className="font-mono text-xs font-bold text-amber-300 uppercase tracking-wider">
+                  Real-Time Threshold Alert Toast Engine
+                </h5>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleTriggerSimulatedAlert}
+                  className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 hover:border-amber-500/50 text-amber-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                  title="Test Alert Toast Trigger"
+                >
+                  <Sparkles size={12} className="text-amber-400" />
+                  <span>Simulate Test Toast</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs font-mono bg-zinc-900/50 p-3 rounded-xl border border-white/5">
+              {/* Alert Score Trigger Threshold Slider */}
+              <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/10">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-zinc-300 font-semibold">Alert Trigger Threshold</span>
+                  <span className="text-amber-400 font-bold px-1.5 py-0.5 bg-amber-950/60 border border-amber-500/30 rounded">
+                    ≥ {alertThreshold} pts
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="80"
+                  step="5"
+                  value={alertThreshold}
+                  onChange={(e) => setAlertThreshold(Number(e.target.value))}
+                  className="w-full accent-amber-500 cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
+                  <button
+                    onClick={() => setAlertThreshold(30)}
+                    className={`hover:text-zinc-300 cursor-pointer ${alertThreshold === 30 ? "text-amber-400 font-bold" : ""}`}
+                  >
+                    Sensitive (30)
+                  </button>
+                  <button
+                    onClick={() => setAlertThreshold(50)}
+                    className={`hover:text-zinc-300 cursor-pointer ${alertThreshold === 50 ? "text-amber-400 font-bold" : ""}`}
+                  >
+                    Standard (50)
+                  </button>
+                  <button
+                    onClick={() => setAlertThreshold(70)}
+                    className={`hover:text-zinc-300 cursor-pointer ${alertThreshold === 70 ? "text-amber-400 font-bold" : ""}`}
+                  >
+                    Critical (70)
+                  </button>
+                </div>
+              </div>
+
+              {/* Notification Toast Enable Toggle */}
+              <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/10 flex flex-col justify-between">
+                <label className="text-zinc-300 font-semibold block mb-1">
+                  Alert Toast Notifications
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer mt-1">
+                  <input
+                    type="checkbox"
+                    checked={enableAlerts}
+                    onChange={(e) => setEnableAlerts(e.target.checked)}
+                    className="w-4 h-4 text-amber-500 bg-zinc-800 border-white/20 rounded focus:ring-amber-400 cursor-pointer"
+                  />
+                  <span className={`text-xs ${enableAlerts ? "text-amber-300 font-bold" : "text-zinc-500"}`}>
+                    {enableAlerts ? "Active (Toasts on Parameter Breach)" : "Muted"}
+                  </span>
+                </label>
+                <span className="text-[10px] text-zinc-500 mt-1">
+                  Fires dynamic toast popup when score crosses {alertThreshold} pts
+                </span>
+              </div>
+
+              {/* Recovery Alerts Toggle */}
+              <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/10 flex flex-col justify-between">
+                <label className="text-zinc-300 font-semibold block mb-1">
+                  Recovery Toasts
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer mt-1">
+                  <input
+                    type="checkbox"
+                    checked={enableRecoveryAlerts}
+                    onChange={(e) => setEnableRecoveryAlerts(e.target.checked)}
+                    className="w-4 h-4 text-emerald-500 bg-zinc-800 border-white/20 rounded focus:ring-emerald-400 cursor-pointer"
+                  />
+                  <span className={`text-xs ${enableRecoveryAlerts ? "text-emerald-300 font-bold" : "text-zinc-500"}`}>
+                    {enableRecoveryAlerts ? "Notify on Risk Normalization" : "Disabled"}
+                  </span>
+                </label>
+                <span className="text-[10px] text-zinc-500 mt-1">
+                  Fires info toast when vendor drops safely below {alertThreshold} pts
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -541,10 +855,19 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
               </th>
               {vendorKeys.map((vk) => {
                 const comp = compositeVendorRisk[vk];
+                const isHighlighted = highlightedVendorKey === vk;
                 return (
-                  <th key={vk} className="py-3.5 px-4 font-bold text-white uppercase tracking-wider">
+                  <th
+                    key={vk}
+                    className={`py-3.5 px-4 font-bold text-white uppercase tracking-wider transition-all rounded-t-xl ${
+                      isHighlighted ? "bg-cyan-950/80 ring-2 ring-cyan-400" : ""
+                    }`}
+                  >
                     <div className="flex items-center justify-between gap-2">
-                      <span>{VENDOR_NAMES[vk]}</span>
+                      <span className="flex items-center gap-1.5">
+                        {isHighlighted && <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>}
+                        <span>{VENDOR_NAMES[vk]}</span>
+                      </span>
                       {comp && (
                         <StatusBadge status={comp.status} label={comp.label} size="sm" />
                       )}
@@ -573,6 +896,7 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
                   {/* Vendor Cell Heatmap */}
                   {vendorKeys.map((vk) => {
                     const item = vendorRisks[vk]?.[crit.key];
+                    const isHighlighted = highlightedVendorKey === vk;
                     if (!item) {
                       return <td key={vk} className="py-3.5 px-4 text-zinc-500">—</td>;
                     }
@@ -593,16 +917,20 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
                       badgeStatus = "review";
                     }
 
+                    if (isHighlighted) {
+                      cellStyle += " ring-2 ring-cyan-400/80 shadow-lg shadow-cyan-900/40 scale-[1.01]";
+                    }
+
                     if (isHiddenByFilter) {
                       return (
-                        <td key={vk} className="py-3.5 px-4 text-zinc-600 opacity-40 bg-zinc-950/20">
+                        <td key={vk} className={`py-3.5 px-4 text-zinc-600 opacity-40 bg-zinc-950/20 ${isHighlighted ? "bg-cyan-950/20" : ""}`}>
                           <span className="text-[11px] italic">{item.valueDisplay} (Filtered)</span>
                         </td>
                       );
                     }
 
                     return (
-                      <td key={vk} className="py-3.5 px-4">
+                      <td key={vk} className={`py-3.5 px-4 transition-colors ${isHighlighted ? "bg-cyan-950/30" : ""}`}>
                         <div
                           onClick={() => {
                             if (item.riskLevel === "high" || item.riskLevel === "medium") {
@@ -645,14 +973,23 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
                 <ShieldAlert size={16} className="text-cyan-400" />
                 <span>Composite Risk Index</span>
               </td>
-              <td className="py-4 px-3 text-xs text-zinc-400">Low &lt; 20%</td>
+              <td className="py-4 px-3 text-xs text-zinc-400">Alert Threshold: ≥ {alertThreshold}%</td>
               {vendorKeys.map((vk) => {
                 const comp = compositeVendorRisk[vk];
+                const isBreached = comp && comp.score >= alertThreshold;
+                const isHighlighted = highlightedVendorKey === vk;
                 return (
-                  <td key={vk} className="py-4 px-4">
+                  <td key={vk} className={`py-4 px-4 transition-colors ${isHighlighted ? "bg-cyan-950/40 ring-2 ring-cyan-400" : ""}`}>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-extrabold text-white">{comp?.score}%</span>
+                      <span className={`text-lg font-extrabold ${isBreached ? "text-red-400" : "text-white"}`}>
+                        {comp?.score}%
+                      </span>
                       <StatusBadge status={comp?.status || "low"} label={comp?.label || "LOW"} size="sm" />
+                      {isBreached && (
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-950 border border-red-500/40 text-red-300 animate-pulse">
+                          BREACH
+                        </span>
+                      )}
                     </div>
                   </td>
                 );
@@ -715,7 +1052,7 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
         )}
       </div>
 
-      {/* Requirement #9: Outlier Details Drawer Modal */}
+      {/* Outlier Details Drawer Modal */}
       {activeOutlierDrawer && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-end animate-fadeIn">
           <div className="w-full max-w-md h-full bg-zinc-950 border-l border-white/10 p-6 shadow-2xl flex flex-col justify-between overflow-y-auto">
@@ -791,6 +1128,164 @@ export function RiskAssessmentHeatmap({ data }: RiskAssessmentHeatmapProps) {
           </div>
         </div>
       )}
+
+      {/* Notification Activity History Drawer */}
+      {showAlertHistoryDrawer && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-end animate-fadeIn">
+          <div className="w-full max-w-lg h-full bg-zinc-950 border-l border-white/10 p-6 shadow-2xl flex flex-col justify-between overflow-y-auto">
+            <div>
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <Bell size={20} className="text-amber-400" />
+                  <div>
+                    <h3 className="font-sans font-bold text-lg text-white">
+                      Risk Threshold Alerts Log
+                    </h3>
+                    <p className="text-[11px] font-mono text-zinc-400">
+                      Local state notification history ({alertHistory.length} triggered events)
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {alertHistory.length > 0 && (
+                    <button
+                      onClick={() => setAlertHistory([])}
+                      className="text-xs font-mono text-zinc-400 hover:text-red-400 p-1.5 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Clear alerts history"
+                    >
+                      <Trash2 size={14} />
+                      <span>Clear</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowAlertHistoryDrawer(false)}
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Threshold Status Banner */}
+              <div className="p-3.5 rounded-xl bg-zinc-900 border border-white/10 mb-4 flex items-center justify-between text-xs font-mono">
+                <div>
+                  <span className="text-zinc-400 block text-[10px] uppercase">Active Alert Threshold</span>
+                  <span className="text-amber-400 font-bold text-sm">≥ {alertThreshold} Composite Risk Points</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-zinc-400 block text-[10px] uppercase">Alert Status</span>
+                  <span className={`font-semibold ${enableAlerts ? "text-emerald-400" : "text-zinc-500"}`}>
+                    {enableAlerts ? "Real-time Monitoring Active" : "Alerts Muted"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Alerts List */}
+              <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
+                {alertHistory.length > 0 ? (
+                  alertHistory.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`p-3.5 rounded-xl border transition-all ${
+                        item.severity === "critical"
+                          ? "bg-red-950/40 border-red-500/40 text-red-100"
+                          : item.severity === "warning"
+                          ? "bg-amber-950/40 border-amber-500/40 text-amber-100"
+                          : "bg-cyan-950/40 border-cyan-500/40 text-cyan-100"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="font-sans font-bold text-xs text-white">
+                          {item.vendorName}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-zinc-400">
+                            {item.timestamp}
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded uppercase border ${
+                              item.severity === "critical"
+                                ? "bg-red-950 text-red-300 border-red-500/50"
+                                : item.severity === "warning"
+                                ? "bg-amber-950 text-amber-300 border-amber-500/50"
+                                : "bg-cyan-950 text-cyan-300 border-cyan-500/50"
+                            }`}
+                          >
+                            {item.severity}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 font-mono text-xs mb-1.5 text-zinc-300">
+                        <span>Risk Score:</span>
+                        <span className="line-through text-zinc-500">{item.oldScore}</span>
+                        <span>&rarr;</span>
+                        <span className="font-bold text-white px-1 rounded bg-black/40">
+                          {item.newScore} pts
+                        </span>
+                        <span className="text-zinc-500 text-[10px]">
+                          (Threshold: {item.threshold} pts)
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-zinc-300 font-sans leading-relaxed mb-2">
+                        {item.message}
+                      </p>
+
+                      {item.flaggedMetrics && item.flaggedMetrics.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {item.flaggedMetrics.map((m, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[10px] font-mono bg-black/50 border border-white/10 px-2 py-0.5 rounded text-zinc-300"
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex justify-end pt-1 border-t border-white/10">
+                        <button
+                          onClick={() => {
+                            handleInspectVendor(item.vendorKey);
+                            setShowAlertHistoryDrawer(false);
+                          }}
+                          className="text-[11px] font-sans font-semibold text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>Highlight in Heatmap</span>
+                          <ArrowRight size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 text-zinc-500 text-xs font-mono bg-zinc-900/30 rounded-xl border border-white/5">
+                    <Bell size={24} className="mx-auto mb-2 text-zinc-600" />
+                    <span>No threshold alert events recorded yet. Adjust benchmark sliders or presets to trigger alerts.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowAlertHistoryDrawer(false)}
+              className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs font-bold cursor-pointer transition-all mt-4"
+            >
+              Close Activity Log
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Real-Time Alert Toast Stack */}
+      <RiskAlertToastStack
+        alerts={activeAlerts}
+        onDismiss={handleDismissAlert}
+        onDismissAll={handleDismissAllAlerts}
+        onInspectVendor={handleInspectVendor}
+      />
     </div>
   );
 }

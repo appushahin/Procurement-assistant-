@@ -28,13 +28,18 @@ import { StructuredVendorData, KsaProjectConfig, KsaProjectSector, KsaVendorComp
 import { VENDOR_NAMES } from "../data";
 import { LanternLogo } from "./LanternLogo";
 import { StatusBadge } from "./StatusBadge";
+import { AppLanguage, TRANSLATIONS } from "../translations";
 
 interface Props {
   data: StructuredVendorData;
   onUpdateVendorData?: (vendorKey: string, updatedMetrics: any) => void;
+  lang?: AppLanguage;
 }
 
-export function SaudiComplianceEngine({ data }: Props) {
+export function SaudiComplianceEngine({ data, lang = "en" }: Props) {
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
+
   // Project-level KSA Regulatory Config State
   const [config, setConfig] = useState<KsaProjectConfig>({
     projectSector: "Government/Critical Infrastructure",
@@ -80,7 +85,42 @@ export function SaudiComplianceEngine({ data }: Props) {
       let ncaCert = true;
       let ksaDataHost = true;
 
-      if (key === "ironclad") {
+      // ESG & Green Mining Defaults
+      let esgPueRating = 1.18;
+      let esgEwasteCertified = true;
+      let esgCarbonOffsetPledge = true;
+      let esgHarshEnvironmentRating = "IP66 / NEMA 4X";
+      let esgScorePercent = 92;
+      let esgPass = true;
+
+      if (key === "meridian") {
+        lcgpa = 68;
+        lcgpaCert = true;
+        esgPueRating = 1.15;
+        esgEwasteCertified = true;
+        esgCarbonOffsetPledge = true;
+        esgHarshEnvironmentRating = "IP66 / NEMA 4X Mining Sealed";
+        esgScorePercent = 96;
+        esgPass = true;
+      } else if (key === "apex") {
+        lcgpa = 54;
+        lcgpaCert = true;
+        esgPueRating = 1.22;
+        esgEwasteCertified = true;
+        esgCarbonOffsetPledge = false;
+        esgHarshEnvironmentRating = "IP54 Industrial";
+        esgScorePercent = 84;
+        esgPass = true;
+      } else if (key === "horizon") {
+        lcgpa = 42;
+        lcgpaCert = true;
+        esgPueRating = 1.32;
+        esgEwasteCertified = false;
+        esgCarbonOffsetPledge = false;
+        esgHarshEnvironmentRating = "IP42 Standard Enclosure";
+        esgScorePercent = 68;
+        esgPass = false;
+      } else if (key === "ironclad") {
         lcgpa = 18;
         lcgpaCert = false;
         hcisApproved = false;
@@ -89,6 +129,12 @@ export function SaudiComplianceEngine({ data }: Props) {
         sasoCert = false;
         ncaCert = false;
         ksaDataHost = false;
+        esgPueRating = 1.55;
+        esgEwasteCertified = false;
+        esgCarbonOffsetPledge = false;
+        esgHarshEnvironmentRating = "IP20 Commercial";
+        esgScorePercent = 38;
+        esgPass = false;
       } else if (key === "vantage") {
         lcgpa = 38;
         lcgpaCert = true;
@@ -98,7 +144,20 @@ export function SaudiComplianceEngine({ data }: Props) {
         sasoCert = true;
         ncaCert = true;
         ksaDataHost = false; // Violates Data Sovereignty if Cloud is true
+        esgPueRating = 1.28;
+        esgEwasteCertified = true;
+        esgCarbonOffsetPledge = false;
+        esgHarshEnvironmentRating = "IP52 Ruggedized";
+        esgScorePercent = 74;
+        esgPass = true;
       }
+
+      // LCGPA Tier calculation
+      let lcgpaTier: "Gold Champion" | "Silver Tier" | "Bronze Compliant" | "Non-Compliant" = "Bronze Compliant";
+      if (lcgpa >= 65) lcgpaTier = "Gold Champion";
+      else if (lcgpa >= 50) lcgpaTier = "Silver Tier";
+      else if (lcgpa >= config.minLcgpaThreshold) lcgpaTier = "Bronze Compliant";
+      else lcgpaTier = "Non-Compliant";
 
       // Check Pillar 1: IKTVA / LCGPA
       const ikvtALcgpaPass = lcgpa >= config.minLcgpaThreshold && lcgpaCert;
@@ -116,6 +175,9 @@ export function SaudiComplianceEngine({ data }: Props) {
       // Check Pillar 4: NCA ECC (Applies if Cloud software is enabled or Gov sector)
       const ncaRequired = config.includesCloudSoftware || hcisRequired;
       const ncaPass = !ncaRequired || (ncaCert && (!config.includesCloudSoftware || ksaDataHost));
+
+      // Check Pillar 5: Saudi Green Initiative ESG (if enabled)
+      const esgCheckPass = !config.enforceGreenMiningEsg || esgPass;
 
       // Calculate Binary Gate Status
       const blockingReasons: string[] = [];
@@ -150,6 +212,12 @@ export function SaudiComplianceEngine({ data }: Props) {
         }
       }
 
+      if (config.enforceGreenMiningEsg && !esgPass) {
+        blockingReasons.push(
+          `Saudi Green Initiative (SGI) ESG Breach: PUE of ${esgPueRating} exceeds 1.25 ceiling or lacks certified NCEC e-waste circularity agreement.`
+        );
+      }
+
       const hasOverride = !!overrides[key];
       const overallGateStatus =
         blockingReasons.length === 0 || hasOverride ? "APPROVE_PURCHASE_ORDER" : "FLAG_AND_BLOCK_PO";
@@ -160,6 +228,7 @@ export function SaudiComplianceEngine({ data }: Props) {
         lcgpaScorePercent: lcgpa,
         lcgpaCertified: lcgpaCert,
         ikvtALcgpaPass,
+        lcgpaTier,
         hcisClassApproved: hcisApproved,
         hcisDirectives: hcisDirs,
         hcisPass,
@@ -169,6 +238,12 @@ export function SaudiComplianceEngine({ data }: Props) {
         ncaEccCertified: ncaCert,
         ksaDataSovereignty: ksaDataHost,
         ncaEccPass: ncaPass,
+        esgPueRating,
+        esgEwasteCertified,
+        esgCarbonOffsetPledge,
+        esgHarshEnvironmentRating,
+        esgScorePercent,
+        esgPass,
         overallGateStatus,
         blockingReasons,
         overrideRecord: overrides[key],
@@ -234,19 +309,21 @@ export function SaudiComplianceEngine({ data }: Props) {
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span className="font-mono text-[11px] uppercase tracking-wider text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/40 px-3 py-0.5 rounded-full flex items-center gap-1.5">
               <ShieldCheck size={13} />
-              <span>KSA Regulatory Logic Gate Engine</span>
+              <span>{isAr ? "محرك بوابات الامتثال التنظيمي السعودي" : "KSA Regulatory Logic Gate Engine"}</span>
             </span>
             <span className="font-mono text-[10px] bg-zinc-900 text-zinc-300 border border-white/10 px-2 py-0.5 rounded-md hidden sm:inline-block">
-              Kingdom of Saudi Arabia Procurement Standards
+              {isAr ? "معايير المشتريات الحكومية بالمملكة العربية السعودية" : "Kingdom of Saudi Arabia Procurement Standards"}
             </span>
             <LanternLogo size="sm" showTagline={false} animated={true} className="hidden sm:inline-flex ml-2 opacity-90" />
           </div>
 
           <h2 className="font-sans text-lg font-bold text-white tracking-tight flex items-center gap-2">
-            <span>Saudi Compliance & Binary Regulatory Gate</span>
+            <span>{isAr ? "الامتثال للأنظمة السعودية وبوابات الترخيص الإلزامية" : "Saudi Compliance & Binary Regulatory Gate"}</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-1 max-w-3xl leading-relaxed">
-            Strict binary pass/fail enforcement preventing Purchase Order (PO) issuance for non-compliant equipment across IKTVA/LCGPA, HCIS, CST/SASO, and NCA ECC pillars.
+            {isAr
+              ? "تطبيق قواعد النجاح/الرسوب الصارمة لمنع إصدار أوامر الشراء (PO) للمعدات غير الممتثلة لمعايير إكتفاء، المحتوى المحلي (LCGPA)، الهيئة العليا للأمن الصناعي (HCIS)، وهيئة الاتصالات (CST)."
+              : "Strict binary pass/fail enforcement preventing Purchase Order (PO) issuance for non-compliant equipment across IKTVA/LCGPA, HCIS, CST/SASO, and NCA ECC pillars."}
           </p>
         </div>
 
@@ -266,14 +343,14 @@ export function SaudiComplianceEngine({ data }: Props) {
             )}
             <div>
               <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider block font-semibold">
-                PO Logic Gate Outcome
+                {isAr ? "نتيجة بوابة أمر الشراء" : "PO Logic Gate Outcome"}
               </span>
               <span className="font-sans font-extrabold text-xs sm:text-sm tracking-tight block">
                 {activeVendorCompliance.overallGateStatus === "APPROVE_PURCHASE_ORDER"
                   ? activeVendorCompliance.overrideRecord
-                    ? "OVERRIDDEN — PO PERMITTED"
-                    : "PASS — PURCHASE ORDER PERMITTED"
-                  : "FLAGGED & BLOCKED — NO PO ISSUANCE"}
+                    ? (isAr ? "تجاوز معتمد — مسموح بأمر الشراء" : "OVERRIDDEN — PO PERMITTED")
+                    : (isAr ? "ناجح — مسموح بإصدار أمر الشراء" : "PASS — PURCHASE ORDER PERMITTED")
+                  : (isAr ? "محظور ومرفوض — ممنوع إصدار أمر الشراء" : "FLAGGED & BLOCKED — NO PO ISSUANCE")}
               </span>
             </div>
           </div>
@@ -306,7 +383,7 @@ export function SaudiComplianceEngine({ data }: Props) {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Project Sector Select */}
           <div>
             <label className="text-[11px] font-mono text-zinc-300 font-semibold block mb-1.5">
@@ -346,9 +423,9 @@ export function SaudiComplianceEngine({ data }: Props) {
             <div>
               <span className="text-xs font-mono font-bold text-white block flex items-center gap-1.5">
                 <Radio size={14} className="text-rose-400" />
-                <span>Includes Wireless / RF?</span>
+                <span>Wireless / RF?</span>
               </span>
-              <span className="text-[10px] font-mono text-zinc-400 block">Triggers CST/SASO Homologation</span>
+              <span className="text-[10px] font-mono text-zinc-400 block">CST / SASO Homologation</span>
             </div>
             <button
               onClick={() => setConfig({ ...config, includesWireless: !config.includesWireless })}
@@ -369,9 +446,9 @@ export function SaudiComplianceEngine({ data }: Props) {
             <div>
               <span className="text-xs font-mono font-bold text-white block flex items-center gap-1.5">
                 <Cloud size={14} className="text-sky-400" />
-                <span>Includes Cloud Software?</span>
+                <span>Cloud Software?</span>
               </span>
-              <span className="text-[10px] font-mono text-zinc-400 block">Triggers NCA Data Sovereignty</span>
+              <span className="text-[10px] font-mono text-zinc-400 block">NCA Data Sovereignty</span>
             </div>
             <button
               onClick={() => setConfig({ ...config, includesCloudSoftware: !config.includesCloudSoftware })}
@@ -382,6 +459,29 @@ export function SaudiComplianceEngine({ data }: Props) {
               <span
                 className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform shadow-md ${
                   config.includesCloudSoftware ? "right-0.5" : "left-0.5"
+                }`}
+              ></span>
+            </button>
+          </div>
+
+          {/* Saudi Green Initiative (SGI) ESG Toggle */}
+          <div className="flex items-center justify-between bg-zinc-900/80 px-3 py-2 rounded-xl border border-white/10">
+            <div>
+              <span className="text-xs font-mono font-bold text-white block flex items-center gap-1.5">
+                <Sparkles size={14} className="text-emerald-400" />
+                <span>SGI Green Mining?</span>
+              </span>
+              <span className="text-[10px] font-mono text-zinc-400 block">PUE &lt; 1.25 &amp; E-Waste</span>
+            </div>
+            <button
+              onClick={() => setConfig({ ...config, enforceGreenMiningEsg: !config.enforceGreenMiningEsg })}
+              className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                config.enforceGreenMiningEsg ? "bg-emerald-600" : "bg-zinc-700"
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform shadow-md ${
+                  config.enforceGreenMiningEsg ? "right-0.5" : "left-0.5"
                 }`}
               ></span>
             </button>
@@ -717,6 +817,66 @@ export function SaudiComplianceEngine({ data }: Props) {
               <span className="text-zinc-400">In-Kingdom Data Center:</span>
               <span className={activeVendorCompliance.ksaDataSovereignty ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
                 {activeVendorCompliance.ksaDataSovereignty ? "Riyadh / Jeddah Region" : "Foreign Territory"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Pillar 5: Saudi Vision 2030 & ESG Green Mining Standards */}
+        <div
+          className={`p-4 rounded-2xl border transition-all md:col-span-2 ${
+            activeVendorCompliance.esgPass
+              ? "bg-zinc-950/80 border-emerald-500/30"
+              : "bg-amber-950/20 border-amber-500/50"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-zinc-900 text-emerald-400 border border-white/10">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <h4 className="font-sans font-bold text-white text-xs">Pillar 5: Saudi Vision 2030 &amp; ESG Green Mining Standards</h4>
+                <span className="text-[10px] font-mono text-zinc-400">Saudi Green Initiative (SGI) • Circular Economy &amp; PUE Compliance</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold border ${
+                activeVendorCompliance.lcgpaTier === "Gold Champion"
+                  ? "bg-amber-950 text-amber-300 border-amber-500/50"
+                  : activeVendorCompliance.lcgpaTier === "Silver Tier"
+                  ? "bg-zinc-800 text-zinc-200 border-zinc-600"
+                  : "bg-emerald-950 text-emerald-300 border-emerald-500/40"
+              }`}>
+                {activeVendorCompliance.lcgpaTier || "Bronze Compliant"}
+              </span>
+              <StatusBadge status={activeVendorCompliance.esgPass ? "low" : "medium"} label={activeVendorCompliance.esgPass ? "SGI COMPLIANT" : "SGI DEFICIENT"} size="sm" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono bg-zinc-900/60 p-3 rounded-xl border border-white/10">
+            <div>
+              <span className="text-[10px] text-zinc-400 block mb-0.5">PUE Datacenter Energy:</span>
+              <span className={`font-bold ${activeVendorCompliance.esgPueRating && activeVendorCompliance.esgPueRating <= 1.25 ? "text-emerald-400" : "text-amber-400"}`}>
+                {activeVendorCompliance.esgPueRating} {activeVendorCompliance.esgPueRating && activeVendorCompliance.esgPueRating <= 1.25 ? "✓ (<1.25 SGI)" : "⚠ (>1.25 High)"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block mb-0.5">NCEC Circular E-Waste:</span>
+              <span className={activeVendorCompliance.esgEwasteCertified ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                {activeVendorCompliance.esgEwasteCertified ? "Certified Take-Back ✓" : "No Circular Agreement"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block mb-0.5">KSA Scope 2 Solar Offset:</span>
+              <span className={activeVendorCompliance.esgCarbonOffsetPledge ? "text-emerald-400 font-bold" : "text-zinc-400 font-bold"}>
+                {activeVendorCompliance.esgCarbonOffsetPledge ? "100% Solar Pledged ✓" : "Uncommitted"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block mb-0.5">Harsh Mining Enclosure:</span>
+              <span className="text-cyan-300 font-bold">
+                {activeVendorCompliance.esgHarshEnvironmentRating || "IP66 / NEMA 4X"}
               </span>
             </div>
           </div>

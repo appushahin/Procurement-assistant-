@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   ShieldCheck,
   FileCheck2,
@@ -24,6 +25,11 @@ import {
   Briefcase,
   TrendingDown,
   Scale,
+  Mail,
+  Send,
+  Globe,
+  Languages,
+  History,
 } from "lucide-react";
 import {
   VendorRawQuotes,
@@ -51,6 +57,7 @@ import {
   calculateVendorScores,
   calculateVendorTco,
   generateFallbackRecommendation,
+  formatCurrencyPrecise,
 } from "./utils";
 import {
   exportToCSV,
@@ -58,6 +65,8 @@ import {
   exportToMaadenWord,
   exportToMaadenPowerPoint,
 } from "./exportUtils";
+import { AppLanguage, TRANSLATIONS } from "./translations";
+import { translateRecommendationObject, translateBatch, translateText } from "./services/translationService";
 
 import { QuoteInputSection } from "./components/QuoteInputSection";
 import { StandardizedLedgerTable } from "./components/StandardizedLedgerTable";
@@ -67,11 +76,56 @@ import { ScoreChartAndWeights } from "./components/ScoreChartAndWeights";
 import { RadarComparisonChart } from "./components/RadarComparisonChart";
 import { TcoLifecycleAnalysis } from "./components/TcoLifecycleAnalysis";
 import { NegotiationSimulator } from "./components/NegotiationSimulator";
-import { NegotiationLetterGenerator } from "./components/NegotiationLetterGenerator";
 import { RecommendationAndSignoff } from "./components/RecommendationAndSignoff";
 import { RfqScenarioSwitcher } from "./components/RfqScenarioSwitcher";
 import { ProcurementChatAssistant } from "./components/ProcurementChatAssistant";
 import { LanternLogo } from "./components/LanternLogo";
+import { ProAssistFluentHub } from "./components/ProAssistFluentHub";
+import { FluentSpotlightWrapper } from "./components/FluentSpotlightWrapper";
+import { AiNegotiationPlaybook } from "./components/AiNegotiationPlaybook";
+import { BafoRevisionDiff } from "./components/BafoRevisionDiff";
+import { LantraAvatar } from "./components/LantraAvatar";
+import { ProactiveMarketAlertBanner } from "./components/ProactiveMarketAlertBanner";
+import {
+  detectMarketMaterialFluctuations,
+  MarketMaterialAlert,
+  PRESET_MATERIAL_ALERTS,
+} from "./services/marketAlertEngine";
+
+// Code split heavy auxiliary modals for faster initial bundle load
+const NegotiationLetterGenerator = lazy(() =>
+  import("./components/NegotiationLetterGenerator").then((m) => ({ default: m.NegotiationLetterGenerator }))
+);
+const OutlookMailApprovalModal = lazy(() =>
+  import("./components/OutlookMailApprovalModal").then((m) => ({ default: m.OutlookMailApprovalModal }))
+);
+const ExportPreviewOverlayModal = lazy(() =>
+  import("./components/ExportPreviewOverlayModal").then((m) => ({ default: m.ExportPreviewOverlayModal }))
+);
+
+const dashboardContainerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.12,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const dashboardItemVariants = {
+  hidden: { opacity: 0, y: 22, scale: 0.995 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      duration: 0.45,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
 
 export default function App() {
   const [quotes, setQuotes] = useState<VendorRawQuotes>(INITIAL_QUOTES);
@@ -79,6 +133,11 @@ export default function App() {
   const [isStandardizing, setIsStandardizing] = useState<boolean>(false);
   const [standardizeError, setStandardizeError] = useState<string | null>(null);
   const [isSimulatedData, setIsSimulatedData] = useState<boolean>(false);
+
+  // Pro Assist & Fluent Security Center State
+  const [isProAssistOpen, setIsProAssistOpen] = useState<boolean>(false);
+  const [proAssistPrompt, setProAssistPrompt] = useState<string | null>(null);
+  const [showFluentHubSection, setShowFluentHubSection] = useState<boolean>(true);
 
   // Binary Compliance & Failover Gates State (Strict YES / NO)
   const [binaryGates, setBinaryGates] = useState<VendorBinaryGateMap>(DEFAULT_BINARY_GATES);
@@ -89,14 +148,50 @@ export default function App() {
   // Active RFQ Scenario
   const [activeScenarioId, setActiveScenarioId] = useState<string>("security-command-center");
 
+  // Proactive Raw Material & Spot Fluctuation State
+  const [activeMarketAlert, setActiveMarketAlert] = useState<MarketMaterialAlert | null>(() => {
+    const alerts = detectMarketMaterialFluctuations("it_hardware");
+    return alerts && alerts.length > 0 ? alerts[0] : (PRESET_MATERIAL_ALERTS[0] || null);
+  });
+  const [isMarketAlertDismissed, setIsMarketAlertDismissed] = useState<boolean>(false);
+  const [currentAlertPresetIndex, setCurrentAlertPresetIndex] = useState<number>(0);
+
   // Currency & Rate state
   const [currency, setCurrency] = useState<CurrencyCode>("SAR");
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>(() => {
+    const saved = localStorage.getItem("lantern_language");
+    return saved === "ar" ? "ar" : "en";
+  });
+
+  const t = TRANSLATIONS[appLanguage];
+
+  const handleLanguageToggle = () => {
+    const next = appLanguage === "en" ? "ar" : "en";
+    setAppLanguage(next);
+    localStorage.setItem("lantern_language", next);
+    setRoleToastMessage(next === "ar" ? "تم تفعيل واجهة اللغة العربية" : "Switched to English Interface");
+    setShowRoleToast(true);
+    setTimeout(() => setShowRoleToast(false), 2500);
+  };
   const [ratesData, setRatesData] = useState<ExchangeRates>({
     base: "USD",
     rates: { USD: 1.0, SAR: 3.75, EUR: 0.918 },
     lastUpdated: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     source: "SAMA Peg / ECB Benchmark",
   });
+
+  // Scenario Memory Cache to persist user edits across scenario toggles
+  const scenarioMemoryRef = useRef<
+    Record<
+      string,
+      {
+        quotes: VendorRawQuotes;
+        structuredData: StructuredVendorData | null;
+        binaryGates: VendorBinaryGateMap;
+        weights: DecisionWeights;
+      }
+    >
+  >({});
 
   // Price conversion helper
   const convertPrice = (priceUSD: number, targetCurrency: CurrencyCode) => {
@@ -106,22 +201,62 @@ export default function App() {
 
   const formatCurrency = (priceUSD: number, targetCurrency: CurrencyCode) => {
     const converted = convertPrice(priceUSD, targetCurrency);
-    if (targetCurrency === "SAR") {
-      return `${Math.round(converted).toLocaleString()} SAR`;
-    } else if (targetCurrency === "EUR") {
-      return `€${Math.round(converted).toLocaleString()}`;
-    } else {
-      return `$${Math.round(converted).toLocaleString()}`;
-    }
+    return formatCurrencyPrecise(converted, targetCurrency, 0);
   };
 
   // Negotiation Letter Modal state
   const [letterVendorKey, setLetterVendorKey] = useState<string | null>(null);
 
-  // AI Recommendation State
+  // Outlook Mail Approval Modal State
+  const [isOutlookModalOpen, setIsOutlookModalOpen] = useState<boolean>(false);
+
+  // Pre-Flight Export Overlay Preview Modal State
+  const [isExportPreviewOpen, setIsExportPreviewOpen] = useState<boolean>(false);
+  const [exportPreviewFormat, setExportPreviewFormat] = useState<"pdf" | "word" | "ppt" | "csv">("pdf");
+
+  const handleOpenExportPreview = (format: "pdf" | "word" | "ppt" | "csv" = "pdf") => {
+    setExportPreviewFormat(format);
+    setIsExportPreviewOpen(true);
+  };
+
+  // AI Recommendation State & Real-time Translation Memory
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
   const [isGeneratingRec, setIsGeneratingRec] = useState<boolean>(false);
   const [recError, setRecError] = useState<string | null>(null);
+  const [isTranslatingRealtime, setIsTranslatingRealtime] = useState<boolean>(false);
+  const originalEnRecRef = useRef<RecommendationResult | null>(null);
+  const originalArRecRef = useRef<RecommendationResult | null>(null);
+
+  // Synchronize Recommendation real-time translation when language switches
+  useEffect(() => {
+    async function syncRecommendationLanguage() {
+      if (!recommendation) return;
+
+      if (appLanguage === "ar") {
+        if (originalArRecRef.current) {
+          setRecommendation(originalArRecRef.current);
+          return;
+        }
+        setIsTranslatingRealtime(true);
+        try {
+          const baseRec = originalEnRecRef.current || recommendation;
+          const translated = await translateRecommendationObject(baseRec, "ar");
+          originalArRecRef.current = translated;
+          setRecommendation(translated);
+        } catch (e) {
+          console.error("Realtime recommendation translation failed:", e);
+        } finally {
+          setIsTranslatingRealtime(false);
+        }
+      } else if (appLanguage === "en") {
+        if (originalEnRecRef.current) {
+          setRecommendation(originalEnRecRef.current);
+        }
+      }
+    }
+
+    syncRecommendationLanguage();
+  }, [appLanguage]);
 
   // Single Signoff Fallback & Multi-Tier Signoff State
   const [signoff, setSignoff] = useState<SignOffRecord | null>(null);
@@ -134,7 +269,11 @@ export default function App() {
 
   const [userRole, setUserRole] = useState<UserRole>("Procurement Officer");
   const [bgTheme, setBgTheme] = useState<BackgroundTheme>(() => {
-    return (localStorage.getItem("lantern_bg_theme") as BackgroundTheme) || "glowing-red";
+    const saved = localStorage.getItem("lantern_bg_theme");
+    if (saved === "white-glow" || saved === "dark-obsidian" || saved === "light-porcelain") {
+      return saved as BackgroundTheme;
+    }
+    return "white-glow";
   });
   const [showRoleToast, setShowRoleToast] = useState<boolean>(false);
   const [roleToastMessage, setRoleToastMessage] = useState<string>("");
@@ -181,16 +320,37 @@ export default function App() {
     return calculateVendorScores(structuredData, weights, binaryGates);
   }, [structuredData, weights, binaryGates]);
 
-  // Scenario Switcher Handler
+  // Scenario Switcher Handler with State Persistence Memory
   const handleSelectScenario = (scenario: (typeof RFQ_SCENARIOS)[0]) => {
+    // 1. Save current active scenario state to memory cache
+    if (activeScenarioId) {
+      scenarioMemoryRef.current[activeScenarioId] = {
+        quotes,
+        structuredData,
+        binaryGates,
+        weights,
+      };
+    }
+
     setActiveScenarioId(scenario.id);
-    setQuotes(scenario.quotes);
-    if (scenario.initialGates) {
-      setBinaryGates(scenario.initialGates);
+
+    // 2. Check if user already customized this scenario in this session
+    const cached = scenarioMemoryRef.current[scenario.id];
+    if (cached) {
+      setQuotes(cached.quotes);
+      setStructuredData(cached.structuredData);
+      setBinaryGates(cached.binaryGates);
+      setWeights(cached.weights);
+    } else {
+      setQuotes(scenario.quotes);
+      if (scenario.initialGates) {
+        setBinaryGates(scenario.initialGates);
+      }
+      if (scenario.weights) {
+        setWeights(scenario.weights);
+      }
     }
-    if (scenario.weights) {
-      setWeights(scenario.weights);
-    }
+
     setRecommendation(null);
     setSignoff(null);
     setMultiTierSignoff({
@@ -202,6 +362,48 @@ export default function App() {
     setRoleToastMessage(`Scenario loaded: ${scenario.name}`);
     setShowRoleToast(true);
     setTimeout(() => setShowRoleToast(false), 3000);
+
+    // Auto-detect market fluctuation relevant to newly loaded category
+    const cat = scenario.id.includes("cloud") ? "datacenter" : "it_hardware";
+    const detected = detectMarketMaterialFluctuations(cat);
+    if (detected && detected.length > 0) {
+      setActiveMarketAlert(detected[0]);
+      setIsMarketAlertDismissed(false);
+    }
+  };
+
+  // Cycle through different raw material fluctuation scenarios (DRAM, GPU substrates, Enterprise SSD NAND, etc.)
+  const handleCycleNextAlert = () => {
+    const nextIndex = (currentAlertPresetIndex + 1) % PRESET_MATERIAL_ALERTS.length;
+    setCurrentAlertPresetIndex(nextIndex);
+    const newAlert = PRESET_MATERIAL_ALERTS[nextIndex];
+    setActiveMarketAlert(newAlert);
+    setIsMarketAlertDismissed(false);
+    setRoleToastMessage(
+      `Market Alert Simulated: ${newAlert.materialName} (${newAlert.percentChange > 0 ? "+" : ""}${newAlert.percentChange}%)`
+    );
+    setShowRoleToast(true);
+    setTimeout(() => setShowRoleToast(false), 3200);
+  };
+
+  // Proactive mitigation: Increase price/TCO weight to penalize unhedged floating quotes
+  const handleAdjustWeightsForHedge = () => {
+    setWeights({
+      price: 45,
+      leadTime: 20,
+      localContent: 25,
+      warranty: 10,
+    });
+    setRoleToastMessage(
+      "Hedge Strategy Applied: TCO/Price decision weight elevated to 45% to penalize floating unhedged vendor quotes."
+    );
+    setShowRoleToast(true);
+    setTimeout(() => setShowRoleToast(false), 3500);
+  };
+
+  const handleOpenLantraWithPrompt = (promptText: string) => {
+    setProAssistPrompt(promptText);
+    setIsProAssistOpen(true);
   };
 
   // Handle manual editing of vendor data
@@ -277,20 +479,20 @@ export default function App() {
   };
 
   // Export handlers
-  const handleExportCSV = () => {
-    exportToCSV(structuredData, scores, weights, recommendation, signoff);
+  const handleExportCSV = (overrideCurrency?: CurrencyCode) => {
+    exportToCSV(structuredData, scores, weights, recommendation, signoff, overrideCurrency || currency, ratesData.rates, appLanguage);
   };
 
-  const handleExportPDF = () => {
-    exportToPDF(structuredData, scores, weights, recommendation, signoff);
+  const handleExportPDF = (overrideCurrency?: CurrencyCode) => {
+    exportToPDF(structuredData, scores, weights, recommendation, signoff, overrideCurrency || currency, ratesData.rates, appLanguage);
   };
 
-  const handleExportWord = () => {
-    exportToMaadenWord(structuredData, scores, weights, recommendation, signoff);
+  const handleExportWord = (overrideCurrency?: CurrencyCode) => {
+    exportToMaadenWord(structuredData, scores, weights, recommendation, signoff, overrideCurrency || currency, ratesData.rates, appLanguage);
   };
 
-  const handleExportPPT = () => {
-    exportToMaadenPowerPoint(structuredData, scores, weights, recommendation, signoff);
+  const handleExportPPT = (overrideCurrency?: CurrencyCode) => {
+    exportToMaadenPowerPoint(structuredData, scores, weights, recommendation, signoff, overrideCurrency || currency, ratesData.rates, appLanguage);
   };
 
   // Standardize Quotations Handler
@@ -352,7 +554,23 @@ export default function App() {
       }
 
       const result = await res.json();
-      setRecommendation(result);
+      originalEnRecRef.current = result;
+      originalArRecRef.current = null;
+
+      if (appLanguage === "ar") {
+        setIsTranslatingRealtime(true);
+        try {
+          const arTranslated = await translateRecommendationObject(result, "ar");
+          originalArRecRef.current = arTranslated;
+          setRecommendation(arTranslated);
+        } catch (e) {
+          setRecommendation(result);
+        } finally {
+          setIsTranslatingRealtime(false);
+        }
+      } else {
+        setRecommendation(result);
+      }
     } catch (err: any) {
       console.warn("API Call Failed, falling back to local synthesis:", err);
       const fallback = generateFallbackRecommendation(
@@ -362,7 +580,23 @@ export default function App() {
         secondVendor,
         VENDOR_NAMES
       );
-      setRecommendation(fallback);
+      originalEnRecRef.current = fallback;
+      originalArRecRef.current = null;
+
+      if (appLanguage === "ar") {
+        setIsTranslatingRealtime(true);
+        try {
+          const arTranslated = await translateRecommendationObject(fallback, "ar");
+          originalArRecRef.current = arTranslated;
+          setRecommendation(arTranslated);
+        } catch (e) {
+          setRecommendation(fallback);
+        } finally {
+          setIsTranslatingRealtime(false);
+        }
+      } else {
+        setRecommendation(fallback);
+      }
     } finally {
       setIsGeneratingRec(false);
     }
@@ -447,8 +681,10 @@ export default function App() {
       case "light-porcelain":
         return "bg-[#f8fafc] bg-[radial-gradient(ellipse_100%_90%_at_50%_-15%,rgba(226,232,240,0.9),rgba(241,245,249,0.7)_45%,rgba(248,250,252,1)_100%)] text-zinc-900";
       case "glowing-red":
-      default:
         return "bg-[#0a0507] bg-[radial-gradient(ellipse_100%_90%_at_50%_-15%,rgba(225,29,72,0.28),rgba(153,27,27,0.12)_45%,rgba(10,5,7,1)_100%)] text-zinc-100";
+      case "white-glow":
+      default:
+        return "bg-[#09090b] bg-[radial-gradient(ellipse_100%_90%_at_50%_-15%,rgba(255,255,255,0.22),rgba(241,245,249,0.08)_45%,rgba(9,9,11,1)_100%)] text-zinc-100";
     }
   }, [bgTheme]);
 
@@ -456,10 +692,20 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen font-sans antialiased selection:bg-red-600 selection:text-white relative transition-all duration-700 ease-in-out ${bgCanvasClasses} theme-role-${roleTheme.key}`}
+      dir={appLanguage === "ar" ? "rtl" : "ltr"}
+      lang={appLanguage}
+      className={`min-h-screen font-sans antialiased selection:bg-white selection:text-black relative transition-all duration-700 ease-in-out ${bgCanvasClasses} theme-role-${roleTheme.key}`}
     >
       {/* Ambient background glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 transition-opacity duration-700">
+        {(bgTheme === "white-glow" || !bgTheme) && (
+          <>
+            <div className="absolute -top-36 left-1/2 -translate-x-1/2 w-[1100px] h-[550px] bg-gradient-to-b from-white/30 via-slate-200/18 to-transparent blur-[140px] rounded-full animate-pulse-glow"></div>
+            <div className="absolute top-1/4 -left-28 w-[650px] h-[650px] bg-gradient-to-tr from-white/20 to-slate-300/10 blur-[160px] rounded-full"></div>
+            <div className="absolute top-1/2 -right-28 w-[700px] h-[700px] bg-gradient-to-bl from-white/20 to-slate-400/12 blur-[170px] rounded-full"></div>
+            <div className="absolute bottom-5 left-1/3 w-[600px] h-[450px] bg-white/12 blur-[150px] rounded-full"></div>
+          </>
+        )}
         {bgTheme === "glowing-red" && (
           <>
             <div className="absolute -top-36 left-1/2 -translate-x-1/2 w-[1100px] h-[550px] bg-gradient-to-b from-red-600/35 via-rose-600/20 to-transparent blur-[140px] rounded-full animate-pulse-glow"></div>
@@ -509,7 +755,7 @@ export default function App() {
         <header
           className={`mb-6 sm:mb-8 glass-header p-4 sm:p-6 rounded-2xl relative overflow-hidden shadow-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-5 transition-all duration-500 ease-in-out ${roleTheme.headerBorder}`}
         >
-          <div className="absolute top-0 right-0 w-96 h-32 bg-red-600/20 blur-3xl rounded-full pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-96 h-32 bg-white/10 blur-3xl rounded-full pointer-events-none"></div>
 
           <div className="flex items-center justify-between sm:justify-start gap-3">
             <LanternLogo size="lg" showTagline={true} animated={true} className="max-w-[220px] sm:max-w-none" />
@@ -523,20 +769,20 @@ export default function App() {
               <span className="transition-transform duration-300 transform scale-105">
                 {roleTheme.roleIcon}
               </span>
-              <span className="text-zinc-400 hidden sm:inline text-[11px]">Role:</span>
+              <span className="text-zinc-400 hidden sm:inline text-[11px]">{t.roleLabel}</span>
               <select
                 value={userRole}
                 onChange={(e) => handleRoleChange(e.target.value as UserRole)}
                 className="bg-transparent font-bold focus:outline-none cursor-pointer text-xs"
               >
                 <option value="Procurement Officer" className="bg-zinc-950 text-white">
-                  Procurement Officer
+                  {t.roleProcurementOfficer}
                 </option>
                 <option value="Approver" className="bg-zinc-950 text-white">
-                  Approver (VP Level)
+                  {t.roleApprover}
                 </option>
                 <option value="Client Viewer" className="bg-zinc-950 text-white">
-                  Client Viewer (Read-Only)
+                  {t.roleClientViewer}
                 </option>
               </select>
             </div>
@@ -545,11 +791,11 @@ export default function App() {
             <div className="relative">
               <button
                 onClick={() => setShowBgDropdown(!showBgDropdown)}
-                className="font-sans text-xs px-3.5 py-2 rounded-xl bg-zinc-900/70 border border-white/12 text-zinc-300 hover:text-white hover:border-zinc-400 font-medium flex items-center gap-1.5 transition-all shadow-sm backdrop-blur-md hover:bg-zinc-800/80 cursor-pointer"
+                className="font-sans text-xs px-3.5 py-2 rounded-xl bg-zinc-900/70 border border-white/15 text-zinc-200 hover:text-white hover:border-white/40 font-medium flex items-center gap-1.5 transition-all shadow-sm backdrop-blur-md hover:bg-zinc-800/80 cursor-pointer"
                 title="Change Background Appearance"
               >
-                <Palette size={14} className="text-rose-400" />
-                <span className="hidden sm:inline">Theme</span>
+                <Palette size={14} className="text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.8)]" />
+                <span className="hidden sm:inline">{t.themeLabel}</span>
               </button>
 
               {showBgDropdown && (
@@ -558,37 +804,37 @@ export default function App() {
                   onMouseLeave={() => setShowBgDropdown(false)}
                 >
                   <div className="flex items-center justify-between pb-2 border-b border-white/10 text-[11px] font-mono text-zinc-400">
-                    <span className="font-bold text-zinc-200">Background Canvas</span>
+                    <span className="font-bold text-zinc-200">{t.themeLabel}</span>
                     <button
                       onClick={() => {
-                        setBgTheme("glowing-red");
+                        setBgTheme("white-glow");
                         setShowBgDropdown(false);
                       }}
-                      className="text-red-400 hover:text-red-300 flex items-center gap-1 cursor-pointer"
-                      title="Reset to default glowing red background"
+                      className="text-white hover:text-zinc-200 flex items-center gap-1 cursor-pointer"
+                      title="Reset background"
                     >
                       <RotateCcw size={11} />
-                      <span>Reset</span>
+                      <span>{t.themeReset}</span>
                     </button>
                   </div>
 
                   <div className="space-y-1.5 text-xs">
                     <button
                       onClick={() => {
-                        setBgTheme("glowing-red");
+                        setBgTheme("white-glow");
                         setShowBgDropdown(false);
                       }}
                       className={`w-full p-2 rounded-xl text-left flex items-center justify-between transition-all cursor-pointer ${
-                        bgTheme === "glowing-red"
-                          ? "bg-red-500/20 border border-red-500/40 text-white font-bold"
+                        bgTheme === "white-glow"
+                          ? "bg-white/20 border border-white/40 text-white font-bold shadow-[0_0_15px_rgba(255,255,255,0.2)]"
                           : "hover:bg-white/5 text-zinc-300"
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-gradient-to-tr from-red-600 to-rose-500 border border-white/30"></span>
-                        <span>Glowing Red (Default)</span>
+                        <span className="w-3 h-3 rounded-full bg-gradient-to-tr from-white to-slate-300 border border-white shadow-[0_0_8px_rgba(255,255,255,0.8)]"></span>
+                        <span>{t.themeWhiteGlow}</span>
                       </div>
-                      {bgTheme === "glowing-red" && <CheckCircle2 size={13} className="text-red-400" />}
+                      {bgTheme === "white-glow" && <CheckCircle2 size={13} className="text-white" />}
                     </button>
 
                     <button
@@ -604,7 +850,7 @@ export default function App() {
                     >
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full bg-gradient-to-tr from-blue-600 to-slate-800 border border-white/30"></span>
-                        <span>Midnight Obsidian</span>
+                        <span>{t.themeMidnightObsidian}</span>
                       </div>
                       {bgTheme === "dark-obsidian" && <CheckCircle2 size={13} className="text-blue-400" />}
                     </button>
@@ -622,7 +868,7 @@ export default function App() {
                     >
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full bg-gradient-to-tr from-zinc-100 to-zinc-300 border border-zinc-400"></span>
-                        <span>Enterprise Porcelain</span>
+                        <span>{t.themeEnterprisePorcelain}</span>
                       </div>
                       {bgTheme === "light-porcelain" && <CheckCircle2 size={13} className="text-zinc-200" />}
                     </button>
@@ -631,141 +877,368 @@ export default function App() {
               )}
             </div>
 
+            {/* Currency Selector */}
+            <div className="flex items-center gap-1 bg-zinc-900/70 border border-white/12 px-2.5 py-1.5 rounded-xl text-xs backdrop-blur-md">
+              <DollarSign size={13} className="text-emerald-400" />
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
+                className="bg-transparent text-white font-bold font-mono focus:outline-none cursor-pointer text-xs"
+                title="Change active currency and IncoTerms normalization"
+              >
+                <option value="SAR" className="bg-zinc-950 text-white">SAR (ريال)</option>
+                <option value="USD" className="bg-zinc-950 text-white">USD ($)</option>
+                <option value="EUR" className="bg-zinc-950 text-white">EUR (€)</option>
+              </select>
+            </div>
+
+            {/* Bilingual EN / AR Language Switcher & Realtime Translation Indicator */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleLanguageToggle}
+                className={`font-sans text-xs px-3 py-1.5 rounded-xl border font-semibold flex items-center gap-1.5 transition-all shadow-sm backdrop-blur-md cursor-pointer ${
+                  appLanguage === "ar"
+                    ? "bg-amber-950/80 border-amber-500/50 text-amber-300 shadow-amber-500/20"
+                    : "bg-zinc-900/70 hover:bg-zinc-800 border-white/15 text-zinc-200 hover:text-white"
+                }`}
+                title={appLanguage === "en" ? "تبديل إلى اللغة العربية مع الترجمة الفورية" : "Switch to English Interface"}
+              >
+                <Languages size={14} className={appLanguage === "ar" ? "text-amber-400 animate-spin" : "text-amber-400"} />
+                <span className="font-bold">{appLanguage === "en" ? "العربية (الترجمة الفورية)" : "English"}</span>
+                {isTranslatingRealtime && (
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                )}
+              </button>
+            </div>
+
+            {/* LANTRA AI Autonomous Copilot Button */}
+            <button
+              onClick={() => setIsProAssistOpen(true)}
+              className="font-sans text-xs px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 via-cyan-600 to-indigo-600 hover:from-blue-500 hover:to-cyan-500 border border-cyan-400/40 text-white font-bold flex items-center gap-2 transition-all shadow-lg shadow-cyan-600/30 cursor-pointer backdrop-blur-md hover:scale-105"
+              title="Open LANTRA AI Autonomous Procurement & Market Intelligence Copilot"
+            >
+              <LantraAvatar size="xs" showStatusIndicator={false} />
+              <span>{t.proAssistBtn}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-ping ml-0.5" />
+            </button>
+
+            <button
+              onClick={() => handleOpenExportPreview("pdf")}
+              className="font-sans text-xs px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600/30 via-zinc-900 to-zinc-900 hover:from-red-600/50 border border-red-500/40 text-white font-medium flex items-center gap-1.5 transition-all shadow-md backdrop-blur-md cursor-pointer hover:border-red-400"
+              title="Open Pre-Flight Overlay Preview to inspect report layout and key data points before final generation"
+            >
+              <Eye size={15} className="text-red-400" />
+              <span>{t.previewExportBtn}</span>
+            </button>
+
+            <button
+              onClick={() => setIsOutlookModalOpen(true)}
+              className="font-sans text-xs px-3.5 py-2 rounded-xl bg-zinc-900/70 hover:bg-zinc-800 border border-white/12 text-zinc-300 hover:text-white font-medium flex items-center gap-1.5 transition-all shadow-sm backdrop-blur-md cursor-pointer"
+              title="Connect with Outlook Mail to dispatch formal approval notifications"
+            >
+              <Mail size={15} className="text-blue-400" />
+              <span className="hidden sm:inline">{t.outlookMailBtn}</span>
+            </button>
+
             <button
               onClick={handleExportCSV}
               className="font-sans text-xs px-3.5 py-2 rounded-xl bg-zinc-900/70 border border-white/12 text-zinc-300 hover:text-white hover:border-zinc-500 font-medium flex items-center gap-1.5 transition-all shadow-sm backdrop-blur-md hover:bg-zinc-800/80 cursor-pointer"
               title="Download CSV Audit Log"
             >
               <FileSpreadsheet size={15} className="text-emerald-400" />
-              <span>Export CSV</span>
+              <span>{t.exportCsvBtn}</span>
             </button>
 
             <button
-              onClick={handleExportPDF}
+              onClick={() => handleOpenExportPreview("pdf")}
               className={`font-sans text-xs px-4 py-2 rounded-xl font-semibold flex items-center gap-1.5 transition-all shadow-lg backdrop-blur-md cursor-pointer ${roleTheme.actionBtn}`}
-              title="Print or Save PDF Executive Summary"
+              title="Preview & Generate PDF Executive Summary"
             >
               <Printer size={15} />
-              <span>PDF Summary</span>
+              <span>{t.pdfSummaryBtn}</span>
             </button>
 
             <span
               className={`font-mono text-xs px-3.5 py-2 rounded-xl bg-zinc-950/70 border font-medium flex items-center gap-1.5 shadow-inner backdrop-blur-md transition-all duration-500 ease-in-out ${roleTheme.badgeBorder}`}
             >
               <ShieldCheck size={15} className={roleTheme.accentText} />
-              <span>RFQ-2026-0803</span>
+              <span>{t.rfqIdLabel}</span>
             </span>
           </div>
         </header>
 
+        {/* Proactive LANTRA Market Material Fluctuation Alert Banner */}
+        <AnimatePresence mode="wait">
+          {!isMarketAlertDismissed && activeMarketAlert && (
+            <ProactiveMarketAlertBanner
+              key={activeMarketAlert.id}
+              alert={activeMarketAlert}
+              onDismiss={() => setIsMarketAlertDismissed(true)}
+              onOpenLantraWithPrompt={handleOpenLantraWithPrompt}
+              onAdjustWeightsForHedge={handleAdjustWeightsForHedge}
+              onCycleNextAlert={handleCycleNextAlert}
+              lang={appLanguage}
+              bgTheme={bgTheme}
+            />
+          )}
+        </AnimatePresence>
+
         {/* RFQ Scenario Switcher */}
-        <RfqScenarioSwitcher
-          activeScenarioId={activeScenarioId}
-          onSelectScenario={handleSelectScenario}
-        />
+        <FluentSpotlightWrapper
+          id="wrap-scenario-switcher"
+          spotlightColor="rgba(59, 130, 246, 0.14)"
+          borderColor="rgba(96, 165, 250, 0.6)"
+          borderRadius="rounded-2xl"
+        >
+          <RfqScenarioSwitcher
+            activeScenarioId={activeScenarioId}
+            onSelectScenario={handleSelectScenario}
+            lang={appLanguage}
+          />
+        </FluentSpotlightWrapper>
+
+        {/* Primary LANTRA: Windows Security & Intelligence Center */}
+        {showFluentHubSection && (
+          <ProAssistFluentHub
+            structuredData={structuredData}
+            scores={scores}
+            weights={weights}
+            recommendation={recommendation}
+            signoff={signoff}
+            binaryGates={binaryGates}
+            bgTheme={bgTheme}
+            lang={appLanguage}
+            onOpenChatWithPrompt={(prompt) => {
+              setProAssistPrompt(prompt);
+              setIsProAssistOpen(true);
+            }}
+          />
+        )}
 
         {/* Component 1: Raw Quotes Input */}
-        <QuoteInputSection
-          quotes={quotes}
-          setQuotes={setQuotes}
-          onStandardize={handleStandardize}
-          isStandardizing={isStandardizing}
-          error={standardizeError}
-          onApplyParsedProposal={handleUpdateVendorData}
-        />
-
-        {/* Component 2: Standardized Comparison Ledger */}
-        {structuredData && (
-          <StandardizedLedgerTable
-            data={structuredData}
-            scores={scores}
-            isSimulated={isSimulatedData}
-            onUpdateVendorData={handleUpdateVendorData}
-            binaryGates={binaryGates}
-            onToggleBinaryGate={handleToggleBinaryGate}
+        <FluentSpotlightWrapper
+          id="wrap-quote-input"
+          spotlightColor="rgba(59, 130, 246, 0.14)"
+          borderColor="rgba(96, 165, 250, 0.6)"
+          borderRadius="rounded-2xl"
+        >
+          <QuoteInputSection
+            quotes={quotes}
+            setQuotes={setQuotes}
+            onStandardize={handleStandardize}
+            isStandardizing={isStandardizing}
+            error={standardizeError}
+            onApplyParsedProposal={handleUpdateVendorData}
+            lang={appLanguage}
           />
-        )}
+        </FluentSpotlightWrapper>
 
-        {/* Component 2.5: Risk Assessment & Outlier Heatmap */}
+        {/* Primary Dashboard Components with Staggered Entrance Animation */}
         {structuredData && (
-          <RiskAssessmentHeatmap data={structuredData} />
-        )}
+          <motion.div
+            key={activeScenarioId + (isSimulatedData ? "-sim" : "")}
+            variants={dashboardContainerVariants}
+            initial="hidden"
+            animate="visible"
+            className="space-y-8"
+          >
+            {/* Component 2: Standardized Comparison Ledger */}
+            <motion.div variants={dashboardItemVariants} id="motion-ledger">
+              <FluentSpotlightWrapper
+                id="wrap-standardized-ledger"
+                spotlightColor="rgba(59, 130, 246, 0.14)"
+                borderColor="rgba(96, 165, 250, 0.7)"
+                borderRadius="rounded-2xl"
+              >
+                <StandardizedLedgerTable
+                  data={structuredData}
+                  scores={scores}
+                  isSimulated={isSimulatedData}
+                  onUpdateVendorData={handleUpdateVendorData}
+                  binaryGates={binaryGates}
+                  onToggleBinaryGate={handleToggleBinaryGate}
+                  lang={appLanguage}
+                />
+              </FluentSpotlightWrapper>
+            </motion.div>
 
-        {/* Component 2.8: Saudi Compliance & Regulatory Logic Gate Engine */}
-        {structuredData && (
-          <SaudiComplianceEngine
-            data={structuredData}
-            onUpdateVendorData={handleUpdateVendorData}
-          />
-        )}
+            {/* Component 2.5: Risk Assessment & Outlier Heatmap */}
+            <motion.div variants={dashboardItemVariants} id="motion-heatmap">
+              <FluentSpotlightWrapper
+                id="wrap-risk-heatmap"
+                spotlightColor="rgba(239, 68, 68, 0.14)"
+                borderColor="rgba(248, 113, 113, 0.7)"
+                borderRadius="rounded-2xl"
+              >
+                <RiskAssessmentHeatmap data={structuredData} lang={appLanguage} />
+              </FluentSpotlightWrapper>
+            </motion.div>
 
-        {/* Component 3: Binary Gatekeeper & Evaluative Weights Matrix */}
-        {structuredData && (
-          <ScoreChartAndWeights
-            weights={weights}
-            setWeights={setWeights}
-            scores={scores}
-            binaryGates={binaryGates}
-            onToggleBinaryGate={handleToggleBinaryGate}
-          />
-        )}
+            {/* Component 2.8: Saudi Compliance & Regulatory Logic Gate Engine */}
+            <motion.div variants={dashboardItemVariants} id="motion-compliance">
+              <FluentSpotlightWrapper
+                id="wrap-saudi-compliance"
+                spotlightColor="rgba(16, 185, 129, 0.14)"
+                borderColor="rgba(52, 211, 153, 0.7)"
+                borderRadius="rounded-2xl"
+              >
+                <SaudiComplianceEngine
+                  data={structuredData}
+                  onUpdateVendorData={handleUpdateVendorData}
+                  lang={appLanguage}
+                />
+              </FluentSpotlightWrapper>
+            </motion.div>
 
-        {/* Component 3.2: Multi-Dimensional Radar Comparison Chart */}
-        {structuredData && (
-          <RadarComparisonChart
-            data={structuredData}
-            scores={scores}
-            binaryGates={binaryGates}
-          />
-        )}
+            {/* Component 3: Binary Gatekeeper & Evaluative Weights Matrix */}
+            <motion.div variants={dashboardItemVariants} id="motion-weights-matrix">
+              <FluentSpotlightWrapper
+                id="wrap-weights-matrix"
+                spotlightColor="rgba(59, 130, 246, 0.14)"
+                borderColor="rgba(96, 165, 250, 0.7)"
+                borderRadius="rounded-2xl"
+              >
+                <ScoreChartAndWeights
+                  weights={weights}
+                  setWeights={setWeights}
+                  scores={scores}
+                  binaryGates={binaryGates}
+                  onToggleBinaryGate={handleToggleBinaryGate}
+                  lang={appLanguage}
+                />
+              </FluentSpotlightWrapper>
+            </motion.div>
 
-        {/* Component 3.5: 3-to-5 Year TCO Lifecycle & Financial Risk Analysis */}
-        {structuredData && (
-          <TcoLifecycleAnalysis
-            data={structuredData}
-            binaryGates={binaryGates}
-            currency={currency}
-            convertPrice={convertPrice}
-            formatCurrency={formatCurrency}
-          />
-        )}
+            {/* Component 3.2: Multi-Dimensional Radar Comparison Chart */}
+            <motion.div variants={dashboardItemVariants} id="motion-radar-chart">
+              <FluentSpotlightWrapper
+                id="wrap-radar-chart"
+                spotlightColor="rgba(6, 182, 212, 0.14)"
+                borderColor="rgba(34, 211, 238, 0.7)"
+                borderRadius="rounded-2xl"
+              >
+                <RadarComparisonChart
+                  data={structuredData}
+                  scores={scores}
+                  binaryGates={binaryGates}
+                  lang={appLanguage}
+                />
+              </FluentSpotlightWrapper>
+            </motion.div>
 
-        {/* Component 3.8: BAFO Negotiation "What-If" Sensitivity Simulator */}
-        {structuredData && (
-          <NegotiationSimulator
-            baseData={structuredData}
-            weights={weights}
-            baseScores={scores}
-            baseGates={binaryGates}
-            currency={currency}
-            formatCurrency={formatCurrency}
-            onApplySimulatedData={handleApplySimulatedData}
-            onOpenLetterGenerator={(vKey) => setLetterVendorKey(vKey)}
-          />
-        )}
+            {/* Component 3.5: 3-to-5 Year TCO Lifecycle & Financial Risk Analysis */}
+            <motion.div variants={dashboardItemVariants} id="motion-tco-analysis">
+              <FluentSpotlightWrapper
+                id="wrap-tco-analysis"
+                spotlightColor="rgba(168, 85, 247, 0.14)"
+                borderColor="rgba(192, 132, 252, 0.7)"
+                borderRadius="rounded-2xl"
+              >
+                <TcoLifecycleAnalysis
+                  data={structuredData}
+                  binaryGates={binaryGates}
+                  currency={currency}
+                  convertPrice={convertPrice}
+                  formatCurrency={formatCurrency}
+                  lang={appLanguage}
+                />
+              </FluentSpotlightWrapper>
+            </motion.div>
 
-        {/* Component 4: Recommendation & Multi-Tier Signoff Governance */}
-        {structuredData && (
-          <RecommendationAndSignoff
-            onGenerate={handleGenerateRecommendation}
-            isGenerating={isGeneratingRec}
-            recommendation={recommendation}
-            error={recError}
-            signoff={signoff}
-            multiTierSignoff={multiTierSignoff}
-            onApproveTier={handleApproveTier}
-            onResetMultiTier={handleResetMultiTier}
-            onApprove={handleApprove}
-            onOverride={handleOverride}
-            onResetSignoff={handleResetSignoff}
-            onExportCSV={handleExportCSV}
-            onExportPDF={handleExportPDF}
-            onExportWord={handleExportWord}
-            onExportPPT={handleExportPPT}
-            userRole={userRole}
-            binaryGates={binaryGates}
-            scores={scores}
-          />
+            {/* Component 3.8: BAFO Negotiation "What-If" Sensitivity Simulator */}
+            <motion.div variants={dashboardItemVariants} id="motion-negotiation-sim">
+              <FluentSpotlightWrapper
+                id="wrap-negotiation-sim"
+                spotlightColor="rgba(236, 72, 153, 0.14)"
+                borderColor="rgba(244, 114, 182, 0.7)"
+                borderRadius="rounded-2xl"
+              >
+                <NegotiationSimulator
+                  baseData={structuredData}
+                  weights={weights}
+                  baseScores={scores}
+                  baseGates={binaryGates}
+                  currency={currency}
+                  formatCurrency={formatCurrency}
+                  onApplySimulatedData={handleApplySimulatedData}
+                  onOpenLetterGenerator={(vKey) => setLetterVendorKey(vKey)}
+                  lang={appLanguage}
+                />
+              </FluentSpotlightWrapper>
+            </motion.div>
+
+            {/* Component 3.9: AI Negotiation Playbook & Bilingual Counter-Offer Generator */}
+            <motion.div variants={dashboardItemVariants} id="motion-negotiation-playbook">
+              <FluentSpotlightWrapper
+                id="wrap-negotiation-playbook"
+                spotlightColor="rgba(236, 72, 153, 0.16)"
+                borderColor="rgba(244, 114, 182, 0.8)"
+                borderRadius="rounded-2xl"
+              >
+                <AiNegotiationPlaybook
+                  data={structuredData}
+                  scores={scores}
+                  binaryGates={binaryGates}
+                  currency={currency}
+                  formatCurrency={formatCurrency}
+                  lang={appLanguage}
+                  onOpenLetterGenerator={(vKey) => setLetterVendorKey(vKey)}
+                />
+              </FluentSpotlightWrapper>
+            </motion.div>
+
+            {/* Component 3.10: Smart Diff Inspector for Vendor Quote Amendments (BAFO Diff) */}
+            <motion.div variants={dashboardItemVariants} id="motion-bafo-diff">
+              <FluentSpotlightWrapper
+                id="wrap-bafo-diff"
+                spotlightColor="rgba(16, 185, 129, 0.14)"
+                borderColor="rgba(52, 211, 153, 0.8)"
+                borderRadius="rounded-2xl"
+              >
+                <BafoRevisionDiff
+                  data={structuredData}
+                  currency={currency}
+                  formatCurrency={formatCurrency}
+                  lang={appLanguage}
+                  onApplyRevisedOffer={handleUpdateVendorData}
+                />
+              </FluentSpotlightWrapper>
+            </motion.div>
+
+            {/* Component 4: Recommendation & Multi-Tier Signoff Governance */}
+            <motion.div variants={dashboardItemVariants} id="motion-signoff-governance">
+              <FluentSpotlightWrapper
+                id="wrap-signoff-governance"
+                spotlightColor="rgba(16, 185, 129, 0.14)"
+                borderColor="rgba(52, 211, 153, 0.7)"
+                borderRadius="rounded-2xl"
+              >
+                <RecommendationAndSignoff
+                  onGenerate={handleGenerateRecommendation}
+                  isGenerating={isGeneratingRec}
+                  recommendation={recommendation}
+                  error={recError}
+                  signoff={signoff}
+                  multiTierSignoff={multiTierSignoff}
+                  onApproveTier={handleApproveTier}
+                  onResetMultiTier={handleResetMultiTier}
+                  onApprove={handleApprove}
+                  onOverride={handleOverride}
+                  onResetSignoff={handleResetSignoff}
+                  onExportCSV={handleExportCSV}
+                  onExportPDF={handleExportPDF}
+                  onExportWord={handleExportWord}
+                  onExportPPT={handleExportPPT}
+                  onOpenExportPreview={handleOpenExportPreview}
+                  onOpenOutlookMail={() => setIsOutlookModalOpen(true)}
+                  userRole={userRole}
+                  binaryGates={binaryGates}
+                  scores={scores}
+                  lang={appLanguage}
+                />
+              </FluentSpotlightWrapper>
+            </motion.div>
+          </motion.div>
         )}
 
         {/* Footer */}
@@ -789,18 +1262,75 @@ export default function App() {
         quotes={quotes}
         bgTheme={bgTheme}
         binaryGates={binaryGates}
+        isOpenControlled={isProAssistOpen}
+        onOpenChange={setIsProAssistOpen}
+        externalTriggerPrompt={proAssistPrompt}
+        onClearTriggerPrompt={() => setProAssistPrompt(null)}
+        lang={appLanguage}
+        activeMarketAlert={isMarketAlertDismissed ? null : activeMarketAlert}
+        onTriggerMarketAlert={(alert) => {
+          setActiveMarketAlert(alert);
+          setIsMarketAlertDismissed(false);
+        }}
       />
 
       {/* Formal Negotiation Letter Generator Modal */}
       {letterVendorKey && structuredData && (
-        <NegotiationLetterGenerator
-          vendorKey={letterVendorKey}
-          data={structuredData}
-          binaryGates={binaryGates}
-          formatCurrency={formatCurrency}
-          currency={currency}
-          onClose={() => setLetterVendorKey(null)}
-        />
+        <Suspense fallback={null}>
+          <NegotiationLetterGenerator
+            vendorKey={letterVendorKey}
+            data={structuredData}
+            binaryGates={binaryGates}
+            formatCurrency={formatCurrency}
+            currency={currency}
+            onClose={() => setLetterVendorKey(null)}
+            lang={appLanguage}
+          />
+        </Suspense>
+      )}
+
+      {/* Outlook Mail Approval Dispatch Modal */}
+      {isOutlookModalOpen && (
+        <Suspense fallback={null}>
+          <OutlookMailApprovalModal
+            isOpen={isOutlookModalOpen}
+            onClose={() => setIsOutlookModalOpen(false)}
+            recommendation={recommendation}
+            signoff={signoff}
+            multiTierSignoff={multiTierSignoff}
+            structuredData={structuredData}
+            scores={scores}
+            currency={currency}
+            formatCurrency={formatCurrency}
+            rfqScenarioName={RFQ_SCENARIOS.find((s) => s.id === activeScenarioId)?.name}
+          />
+        </Suspense>
+      )}
+
+      {/* Pre-Flight Export Overlay Preview Modal */}
+      {isExportPreviewOpen && (
+        <Suspense fallback={null}>
+          <ExportPreviewOverlayModal
+            isOpen={isExportPreviewOpen}
+            onClose={() => setIsExportPreviewOpen(false)}
+            data={structuredData}
+            scores={scores}
+            weights={weights}
+            recommendation={recommendation}
+            signoff={signoff}
+            multiTierSignoff={multiTierSignoff}
+            binaryGates={binaryGates}
+            lang={appLanguage}
+            rfqId={RFQ_SCENARIOS.find((s) => s.id === activeScenarioId)?.id || "RFQ-2026-0803"}
+            activeCurrency={currency}
+            exchangeRates={ratesData}
+            initialFormat={exportPreviewFormat}
+            onExportPDF={handleExportPDF}
+            onExportWord={handleExportWord}
+            onExportPPT={handleExportPPT}
+            onExportCSV={handleExportCSV}
+          />
+        </Suspense>
       )}
     </div>
   );

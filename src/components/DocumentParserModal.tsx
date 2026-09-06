@@ -98,24 +98,51 @@ export function DocumentParserModal({ isOpen, onClose, onApplyProposal, existing
   // Handle PDF / File Selection from User PC System
   const handleFileSelect = async (selectedFile: File) => {
     if (!selectedFile) return;
+
+    // Check file size (Max 15MB)
+    const MAX_SIZE = 15 * 1024 * 1024;
+    if (selectedFile.size > MAX_SIZE) {
+      setParseError("File exceeds 15 MB limit. Please select a smaller PDF or paste proposal excerpts.");
+      return;
+    }
+
+    // Check file type
+    const isPdf = selectedFile.type === "application/pdf" || selectedFile.name.toLowerCase().endsWith(".pdf");
+    const isTextOrEml = selectedFile.type.includes("text") || selectedFile.name.endsWith(".eml") || selectedFile.name.endsWith(".txt");
+
+    if (!isPdf && !isTextOrEml) {
+      setParseError("Unsupported file format. Please upload a PDF (.pdf), Email (.eml), or Text (.txt) file.");
+      return;
+    }
+
     setFile(selectedFile);
     setParseError(null);
     setParsedResult(null);
 
     // Read base64 data url for PDF sending
     const reader = new FileReader();
+    reader.onerror = () => {
+      setParseError("Failed to read file from disk. Please verify file permissions.");
+    };
     reader.onload = async (e) => {
       const result = e.target?.result as string;
       setFileDataUrl(result);
 
       // Extract client-side text if PDF
-      if (selectedFile.type === "application/pdf" || selectedFile.name.endsWith(".pdf")) {
+      if (isPdf) {
         try {
           const arrayBuffer = await selectedFile.arrayBuffer();
           const text = await extractTextFromPdf(arrayBuffer);
-          setExtractedPdfText(text);
-        } catch (err) {
+          if (text && text.trim().length > 0) {
+            setExtractedPdfText(text);
+          } else {
+            console.log("PDF has scanned/raster content, OCR endpoint will process document image.");
+          }
+        } catch (err: any) {
           console.warn("Could not extract pdf text locally:", err);
+          if (err?.message?.includes("password") || err?.name === "PasswordException") {
+            setParseError("This PDF appears to be password-protected or encrypted. Please provide an unencrypted proposal document.");
+          }
         }
       }
     };

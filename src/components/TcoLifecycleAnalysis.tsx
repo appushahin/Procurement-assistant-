@@ -16,6 +16,7 @@ import { StructuredVendorData, VendorBinaryGateMap, CurrencyCode } from "../type
 import { VENDOR_NAMES } from "../data";
 import { calculateVendorTco } from "../utils";
 import { LanternLogo } from "./LanternLogo";
+import { AppLanguage, TRANSLATIONS } from "../translations";
 
 interface Props {
   data: StructuredVendorData;
@@ -23,6 +24,7 @@ interface Props {
   currency: CurrencyCode;
   convertPrice: (priceUSD: number, targetCurrency: CurrencyCode) => number;
   formatCurrency: (priceUSD: number, targetCurrency: CurrencyCode) => string;
+  lang?: AppLanguage;
 }
 
 export function TcoLifecycleAnalysis({
@@ -31,9 +33,13 @@ export function TcoLifecycleAnalysis({
   currency,
   convertPrice,
   formatCurrency,
+  lang = "en",
 }: Props) {
+  const isAr = lang === "ar";
+  const t = TRANSLATIONS[lang];
   const [timeHorizon, setTimeHorizon] = useState<"3yr" | "5yr">("5yr");
   const [showDowntimeRisk, setShowDowntimeRisk] = useState<boolean>(true);
+  const [displayMode, setDisplayMode] = useState<"stacked" | "cumulative">("stacked");
 
   const tcoMetrics = useMemo(() => {
     return calculateVendorTco(data, binaryGates, VENDOR_NAMES);
@@ -41,7 +47,7 @@ export function TcoLifecycleAnalysis({
 
   const vendorKeys = Object.keys(VENDOR_NAMES);
 
-  // Prepare chart dataset
+  // Prepare chart dataset for stacked view
   const chartData = vendorKeys.map((key) => {
     const tco = tcoMetrics[key];
     const isFiveYear = timeHorizon === "5yr";
@@ -67,12 +73,40 @@ export function TcoLifecycleAnalysis({
     };
   });
 
+  // Prepare Year-by-Year cumulative progression dataset
+  const cumulativeData = [0, 1, 2, 3, 4, 5].slice(0, timeHorizon === "5yr" ? 6 : 4).map((year) => {
+    const row: any = { year: year === 0 ? "Day 1 (CAPEX)" : `Year ${year}` };
+    vendorKeys.forEach((key) => {
+      const v = data[key];
+      const tco = tcoMetrics[key];
+      const capex = convertPrice(tco?.initialCapex || 0, currency);
+      const integration = convertPrice(tco?.integrationWorkaroundCost || 0, currency);
+      const annualOpex = convertPrice(tco?.annualSlaOpex || 0, currency);
+      const postWarrantyCostPerYear = convertPrice(3500, currency);
+      const warrantyYears = v?.warrantyYears || 3;
+      const risk = showDowntimeRisk ? convertPrice(tco?.contingencyRiskCost || 0, currency) * 0.2 : 0;
+
+      if (year === 0) {
+        row[key] = Math.round(capex + integration);
+      } else {
+        const outOfWarranty = year > warrantyYears ? (year - warrantyYears) * postWarrantyCostPerYear : 0;
+        row[key] = Math.round(capex + integration + annualOpex * year + risk * year + outOfWarranty);
+      }
+    });
+    return row;
+  });
+
   // Find lowest TCO vendor
   const validVendors = chartData.filter((v) => !v.isDisqualified);
   const lowestTcoVendor =
     validVendors.length > 0
       ? validVendors.reduce((prev, curr) => (prev.total < curr.total ? prev : curr))
       : chartData[0];
+
+  // Find lowest upfront CAPEX vendor among valid
+  const lowestCapexVendor = validVendors.length > 0
+    ? validVendors.reduce((prev, curr) => (prev["Upfront CAPEX"] < curr["Upfront CAPEX"] ? prev : curr))
+    : chartData[0];
 
   return (
     <div className="glass-card p-6 rounded-2xl mb-8 border border-white/10 shadow-2xl relative overflow-hidden">
@@ -96,6 +130,30 @@ export function TcoLifecycleAnalysis({
 
         {/* Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Display Mode Selector */}
+          <div className="bg-zinc-950/80 p-1 rounded-xl border border-white/10 flex items-center">
+            <button
+              onClick={() => setDisplayMode("stacked")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                displayMode === "stacked"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              Category Stack
+            </button>
+            <button
+              onClick={() => setDisplayMode("cumulative")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                displayMode === "cumulative"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              Cumulative Trajectory
+            </button>
+          </div>
+
           {/* Horizon Selector */}
           <div className="bg-zinc-950/80 p-1 rounded-xl border border-white/10 flex items-center">
             <button
@@ -136,45 +194,112 @@ export function TcoLifecycleAnalysis({
         </div>
       </div>
 
+      {/* CAPEX vs 5-Year TCO Paradox Callout */}
+      <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-purple-950/40 via-zinc-950 to-zinc-950 border border-purple-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
+            <TrendingDown size={18} />
+          </div>
+          <div>
+            <div className="font-bold text-white flex items-center gap-2">
+              <span>Strategic TCO Paradox: Upfront CAPEX vs 5-Year Total Cost</span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-500/40">
+                Procurement Intelligence
+              </span>
+            </div>
+            <p className="text-zinc-300 text-[11px] mt-0.5 leading-relaxed font-sans">
+              While <strong className="text-white">{lowestCapexVendor?.name}</strong> offers the lowest upfront purchase price ({formatCurrency(data[lowestCapexVendor?.key]?.priceUSD || 0, currency)}), <strong className="text-emerald-400">{lowestTcoVendor?.name}</strong> wins the 5-Year TCO ({formatCurrency(lowestTcoVendor?.total || 0, currency)}) due to zero workaround engineering, longer warranty protection, and native certified failover.
+            </p>
+          </div>
+        </div>
+        <div className="font-mono text-right shrink-0 bg-zinc-900/80 px-3 py-1.5 rounded-lg border border-white/10">
+          <span className="text-[10px] text-zinc-400 block">5-Yr Net Advantage</span>
+          <span className="text-emerald-400 font-bold text-sm">
+            +{formatCurrency(Math.max(0, (lowestCapexVendor?.total || 0) - (lowestTcoVendor?.total || 0)), currency)} Saved
+          </span>
+        </div>
+      </div>
+
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-12 gap-6">
-        {/* Stacked Cost Chart */}
+        {/* Chart or Cumulative Table (7 cols) */}
         <div className="lg:col-span-7 bg-zinc-950/70 p-5 rounded-xl border border-white/5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-mono text-zinc-300 font-semibold uppercase tracking-wider">
-                Cost Breakdown by Category ({currency})
-              </span>
-              <span className="text-[11px] font-mono text-zinc-400">
-                Lowest TCO: <strong className="text-emerald-400">{lowestTcoVendor?.name}</strong>
-              </span>
-            </div>
+          {displayMode === "stacked" ? (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-mono text-zinc-300 font-semibold uppercase tracking-wider">
+                  Cost Breakdown by Category ({currency})
+                </span>
+                <span className="text-[11px] font-mono text-zinc-400">
+                  Lowest TCO: <strong className="text-emerald-400">{lowestTcoVendor?.name}</strong>
+                </span>
+              </div>
 
-            <div className="w-full h-64 mt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255, 255, 255, 0.08)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#ffffff", fontWeight: 600 }} />
-                  <YAxis tick={{ fontSize: 11, fill: "#a1a1aa" }} />
-                  <Tooltip
-                    formatter={(value: any, name: any) => [`${Number(value).toLocaleString()} ${currency}`, name]}
-                    contentStyle={{
-                      backgroundColor: "#09090b",
-                      borderColor: "rgba(255, 255, 255, 0.15)",
-                      borderRadius: "12px",
-                      fontSize: "12px",
-                      color: "#ffffff",
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                  <Bar dataKey="Upfront CAPEX" stackId="a" fill="#0284c7" />
-                  <Bar dataKey="Integration & Setup" stackId="a" fill="#f59e0b" />
-                  <Bar dataKey="Multi-Year OPEX (SLA)" stackId="a" fill="#10b981" />
-                  {showDowntimeRisk && <Bar dataKey="Downtime Risk Buffer" stackId="a" fill="#ef4444" />}
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="w-full h-64 mt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 20, right: 20, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255, 255, 255, 0.08)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#ffffff", fontWeight: 600 }} />
+                    <YAxis tick={{ fontSize: 11, fill: "#a1a1aa" }} />
+                    <Tooltip
+                      formatter={(value: any, name: any) => [`${Number(value).toLocaleString()} ${currency}`, name]}
+                      contentStyle={{
+                        backgroundColor: "#09090b",
+                        borderColor: "rgba(255, 255, 255, 0.15)",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        color: "#ffffff",
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
+                    <Bar dataKey="Upfront CAPEX" stackId="a" fill="#0284c7" />
+                    <Bar dataKey="Integration & Setup" stackId="a" fill="#f59e0b" />
+                    <Bar dataKey="Multi-Year OPEX (SLA)" stackId="a" fill="#10b981" />
+                    {showDowntimeRisk && <Bar dataKey="Downtime Risk Buffer" stackId="a" fill="#ef4444" />}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-mono text-zinc-300 font-semibold uppercase tracking-wider">
+                  Year-by-Year Cumulative Cashflow Progression ({currency})
+                </span>
+                <span className="text-[11px] font-mono text-purple-400">
+                  Cumulative Spend Curve
+                </span>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-white/10 mt-2">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead>
+                    <tr className="bg-zinc-900 text-zinc-400 border-b border-white/10 text-[11px]">
+                      <th className="p-2.5">Timeline Milestone</th>
+                      {vendorKeys.map((k) => (
+                        <th key={k} className="p-2.5">{VENDOR_NAMES[k]?.split(" ")[0]}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {cumulativeData.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-white/5">
+                        <td className="p-2.5 font-bold text-zinc-200">{row.year}</td>
+                        {vendorKeys.map((k) => {
+                          const isLowest = validVendors.length > 0 && Math.min(...validVendors.map(v => cumulativeData[idx][v.key])) === row[k];
+                          return (
+                            <td key={k} className={`p-2.5 ${isLowest ? "text-emerald-400 font-bold" : "text-zinc-300"}`}>
+                              {Number(row[k]).toLocaleString()} {currency}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-zinc-400">
             <span className="flex items-center gap-1.5">

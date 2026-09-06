@@ -7,6 +7,9 @@ export interface LanternLogoProps {
   showTagline?: boolean;
   className?: string;
   variant?: "standard" | "shimmer" | "monochrome";
+  href?: string;
+  target?: string;
+  rel?: string;
 }
 
 export function LanternLogo({
@@ -16,6 +19,9 @@ export function LanternLogo({
   showTagline = false,
   className = "",
   variant = "standard",
+  href = "https://www.lantern.com.sa/",
+  target = "_blank",
+  rel = "noopener noreferrer",
 }: LanternLogoProps) {
   // Determine height based on size preset if explicit height not provided
   const heightPx =
@@ -25,12 +31,25 @@ export function LanternLogo({
   // Aspect ratio of full logo is approx 4.2 : 1
   const widthPx = Math.round(heightPx * 4.2);
 
-  return (
-    <div
-      className={`inline-flex flex-col items-start select-none group ${className}`}
-      title="Lantern Procurement Intelligence"
-    >
+  const innerContent = (
+    <>
       <div className="relative flex items-center">
+        {/* Radiant Red Glowing Radial Aura Backdrops */}
+        <div
+          className="pointer-events-none absolute -inset-x-10 -inset-y-7 -z-10 rounded-full opacity-85 group-hover:opacity-100 transition-opacity duration-500 blur-2xl"
+          style={{
+            background:
+              "radial-gradient(ellipse 90% 80% at 45% 48%, rgba(239, 68, 68, 0.6) 0%, rgba(220, 38, 38, 0.38) 35%, rgba(185, 28, 28, 0.15) 65%, transparent 85%)",
+          }}
+        />
+        <div
+          className="pointer-events-none absolute -inset-3 -z-10 rounded-full opacity-70 group-hover:opacity-95 transition-opacity duration-500 blur-md"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 50%, rgba(248, 113, 113, 0.55) 0%, rgba(225, 29, 72, 0.3) 45%, transparent 75%)",
+          }}
+        />
+
         {/* SVG Live Animated Lantern Logo */}
         <svg
           width={widthPx}
@@ -41,7 +60,7 @@ export function LanternLogo({
           className="overflow-visible transition-transform duration-300 group-hover:scale-[1.02]"
         >
           <defs>
-            {/* Red Beam Gradient */}
+            {/* White Glow Beam Gradient */}
             <linearGradient
               id="lanternRedGradient"
               x1="0%"
@@ -49,24 +68,25 @@ export function LanternLogo({
               x2="100%"
               y2="100%"
             >
-              <stop offset="0%" stopColor="#EF4444" />
-              <stop offset="50%" stopColor="#EE1C25" />
-              <stop offset="100%" stopColor="#B91C1C" />
+              <stop offset="0%" stopColor="#FFFFFF" />
+              <stop offset="45%" stopColor="#F1F5F9" />
+              <stop offset="75%" stopColor="#E2E8F0" />
+              <stop offset="100%" stopColor="#94A3B8" />
             </linearGradient>
 
-            {/* Glowing Red Filter */}
-            <filter id="lanternGlow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
+            {/* Glowing White Light Filter */}
+            <filter id="lanternGlow" x="-25%" y="-25%" width="150%" height="150%">
+              <feGaussianBlur stdDeviation="3.5" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
 
             {/* Shimmer overlay gradient */}
             <linearGradient id="lanternShimmerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#EE1C25" />
-              <stop offset="40%" stopColor="#F87171" />
+              <stop offset="0%" stopColor="#CBD5E1" />
+              <stop offset="40%" stopColor="#F8FAFC" />
               <stop offset="50%" stopColor="#FFFFFF" />
-              <stop offset="60%" stopColor="#F87171" />
-              <stop offset="100%" stopColor="#EE1C25" />
+              <stop offset="60%" stopColor="#F8FAFC" />
+              <stop offset="100%" stopColor="#CBD5E1" />
             </linearGradient>
           </defs>
 
@@ -74,47 +94,47 @@ export function LanternLogo({
           {/* LEFT GRAPHIC: Animated Perspective Node Matrix (Beam Array)   */}
           {/* ============================================================ */}
           <g className="lantern-matrix-group">
-            {/* Column 1 (Far left silver dots) */}
+            {/* Column 1 (Far left silver-gray dots) */}
             <g className={animated ? "animate-logo-matrix-1" : ""}>
-              <rect x="2" y="58" width="4" height="4" fill="#9CA3AF" opacity="0.6" rx="0.5" />
-              <rect x="6" y="50" width="4.5" height="4.5" fill="#9CA3AF" opacity="0.7" rx="0.5" />
-              <rect x="10" y="42" width="5" height="5" fill="#9CA3AF" opacity="0.8" rx="0.5" />
-              <rect x="14" y="34" width="5.5" height="5.5" fill="#9CA3AF" opacity="0.8" rx="0.5" />
-              <rect x="18" y="26" width="6" height="6" fill="#9CA3AF" opacity="0.9" rx="0.5" />
-              <rect x="22" y="18" width="6.5" height="6.5" fill="#9CA3AF" opacity="0.9" rx="0.5" />
+              <rect x="2" y="58" width="4" height="4" fill="#64748B" opacity="0.6" rx="0.5" />
+              <rect x="6" y="50" width="4.5" height="4.5" fill="#64748B" opacity="0.7" rx="0.5" />
+              <rect x="10" y="42" width="5" height="5" fill="#64748B" opacity="0.8" rx="0.5" />
+              <rect x="14" y="34" width="5.5" height="5.5" fill="#64748B" opacity="0.8" rx="0.5" />
+              <rect x="18" y="26" width="6" height="6" fill="#64748B" opacity="0.9" rx="0.5" />
+              <rect x="22" y="18" width="6.5" height="6.5" fill="#64748B" opacity="0.9" rx="0.5" />
             </g>
 
-            {/* Column 2 (Pinkish transition dots) */}
+            {/* Column 2 (Subtle cool silver dots) */}
             <g className={animated ? "animate-logo-matrix-2" : ""}>
-              <rect x="8" y="62" width="4.5" height="4.5" fill="#F43F5E" opacity="0.7" rx="0.5" />
-              <rect x="13" y="54" width="5" height="5" fill="#F43F5E" opacity="0.8" rx="0.5" />
-              <rect x="18" y="45" width="5.5" height="5.5" fill="#F43F5E" opacity="0.85" rx="0.5" />
-              <rect x="23" y="36" width="6" height="6" fill="#F43F5E" opacity="0.9" rx="0.5" />
-              <rect x="28" y="27" width="6.5" height="6.5" fill="#F43F5E" opacity="0.95" rx="0.5" />
-              <rect x="33" y="18" width="7" height="7" fill="#F43F5E" opacity="1" rx="0.5" />
+              <rect x="8" y="62" width="4.5" height="4.5" fill="#94A3B8" opacity="0.7" rx="0.5" />
+              <rect x="13" y="54" width="5" height="5" fill="#94A3B8" opacity="0.8" rx="0.5" />
+              <rect x="18" y="45" width="5.5" height="5.5" fill="#94A3B8" opacity="0.85" rx="0.5" />
+              <rect x="23" y="36" width="6" height="6" fill="#94A3B8" opacity="0.9" rx="0.5" />
+              <rect x="28" y="27" width="6.5" height="6.5" fill="#94A3B8" opacity="0.95" rx="0.5" />
+              <rect x="33" y="18" width="7" height="7" fill="#94A3B8" opacity="1" rx="0.5" />
             </g>
 
-            {/* Column 3 (Vivid Red dots) */}
+            {/* Column 3 (Bright Platinum dots) */}
             <g className={animated ? "animate-logo-matrix-3" : ""}>
-              <rect x="16" y="66" width="5" height="5" fill="#EE1C25" opacity="0.85" rx="0.5" />
-              <rect x="22" y="57" width="5.5" height="5.5" fill="#EE1C25" opacity="0.9" rx="0.5" />
-              <rect x="28" y="48" width="6" height="6" fill="#EE1C25" opacity="0.95" rx="0.5" />
-              <rect x="34" y="38" width="6.5" height="6.5" fill="#EE1C25" opacity="1" rx="0.5" />
-              <rect x="40" y="28" width="7" height="7" fill="#EE1C25" opacity="1" rx="0.5" />
+              <rect x="16" y="66" width="5" height="5" fill="#CBD5E1" opacity="0.85" rx="0.5" />
+              <rect x="22" y="57" width="5.5" height="5.5" fill="#CBD5E1" opacity="0.9" rx="0.5" />
+              <rect x="28" y="48" width="6" height="6" fill="#CBD5E1" opacity="0.95" rx="0.5" />
+              <rect x="34" y="38" width="6.5" height="6.5" fill="#CBD5E1" opacity="1" rx="0.5" />
+              <rect x="40" y="28" width="7" height="7" fill="#CBD5E1" opacity="1" rx="0.5" />
             </g>
 
-            {/* Column 4 (Bright Red Core Array) */}
+            {/* Column 4 (Pure White Core Array) */}
             <g className={animated ? "animate-logo-matrix-4" : ""}>
-              <rect x="25" y="70" width="5.5" height="5.5" fill="#DC2626" rx="0.5" />
-              <rect x="32" y="60" width="6" height="6" fill="#DC2626" rx="0.5" />
-              <rect x="39" y="50" width="6.5" height="6.5" fill="#DC2626" rx="0.5" />
-              <rect x="46" y="39" width="7" height="7" fill="#DC2626" rx="0.5" />
+              <rect x="25" y="70" width="5.5" height="5.5" fill="#E2E8F0" rx="0.5" />
+              <rect x="32" y="60" width="6" height="6" fill="#E2E8F0" rx="0.5" />
+              <rect x="39" y="50" width="6.5" height="6.5" fill="#F8FAFC" rx="0.5" />
+              <rect x="46" y="39" width="7" height="7" fill="#FFFFFF" rx="0.5" />
             </g>
 
-            {/* Column 5 (Anchoring Red Nodes) */}
+            {/* Column 5 (Anchoring Brilliant White Glowing Nodes) */}
             <g className={animated ? "animate-logo-matrix-5" : ""}>
-              <rect x="35" y="73" width="6" height="6" fill="#B91C1C" rx="0.5" />
-              <rect x="43" y="63" width="6.5" height="6.5" fill="#EE1C25" rx="0.5" filter="url(#lanternGlow)" />
+              <rect x="35" y="73" width="6" height="6" fill="#F1F5F9" rx="0.5" />
+              <rect x="43" y="63" width="6.5" height="6.5" fill="#FFFFFF" rx="0.5" filter="url(#lanternGlow)" />
             </g>
           </g>
 
@@ -168,25 +188,50 @@ export function LanternLogo({
       </div>
 
       {showTagline && (
-        <div className="mt-1.5 flex items-center gap-1.5 animate-fadeIn">
-          {/* Red-White Waving Animated Ribbon Container */}
-          <div className="relative group/tagline overflow-hidden rounded-full p-[1.5px] shadow-lg shadow-red-600/20">
-            {/* Animated Waving Red and White Gradient Wave */}
-            <div className="absolute inset-0 red-white-wave-bg opacity-95 rounded-full animate-wave-flow"></div>
+        <div className="mt-2 flex items-center animate-fadeIn">
+          {/* Capsule Pill exactly matching the design in image.png */}
+          <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full border border-white/70 bg-zinc-950/70 backdrop-blur-md shadow-[0_0_15px_rgba(255,255,255,0.08)] hover:border-white/90 hover:shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all duration-300">
+            {/* Left Brand Identifier */}
+            <span className="font-mono text-[9px] sm:text-[10px] tracking-[0.24em] font-semibold text-zinc-300 uppercase">
+              LANTERN
+            </span>
 
-            {/* Inner Translucent Pill for Crisp Typography and High Legibility */}
-            <div className="relative px-3 py-0.5 rounded-full bg-zinc-950/75 backdrop-blur-md flex items-center gap-2 transition-all duration-300 group-hover/tagline:bg-zinc-950/60">
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.22em] font-black text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-rose-200 to-red-400 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                LANTERN
-              </span>
-              <span className="w-1 h-1 rounded-full bg-red-400 animate-ping"></span>
-              <span className="font-mono text-[9px] uppercase tracking-[0.22em] font-bold text-zinc-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-                PROCUREMENT GOVERNANCE & INTELLIGENCE
-              </span>
+            {/* Subtle Vertical Divider */}
+            <span className="w-px h-6 bg-zinc-600/60" aria-hidden="true" />
+
+            {/* Right 3-Tier Stacked Tagline */}
+            <div className="flex flex-col text-[7px] sm:text-[7.5px] font-mono font-bold uppercase tracking-[0.22em] text-zinc-300 leading-[1.25] text-left">
+              <span>PROCUREMENT</span>
+              <span>GOVERNANCE &amp;</span>
+              <span>INTELLIGENCE</span>
             </div>
           </div>
         </div>
       )}
+    </>
+  );
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target={target}
+        rel={rel}
+        className={`inline-flex flex-col items-start select-none group cursor-pointer transition-transform duration-200 hover:scale-[1.015] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50 rounded-2xl ${className}`}
+        title="Visit Lantern Official Website (https://www.lantern.com.sa/)"
+        aria-label="Visit Lantern Official Website (https://www.lantern.com.sa/)"
+      >
+        {innerContent}
+      </a>
+    );
+  }
+
+  return (
+    <div
+      className={`inline-flex flex-col items-start select-none group ${className}`}
+      title="Lantern Procurement Intelligence"
+    >
+      {innerContent}
     </div>
   );
 }

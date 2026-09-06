@@ -194,6 +194,7 @@ export interface KsaVendorCompliance {
   lcgpaScorePercent: number; // e.g. 42
   lcgpaCertified: boolean;
   ikvtALcgpaPass: boolean;
+  lcgpaTier?: "Gold Champion" | "Silver Tier" | "Bronze Compliant" | "Non-Compliant";
 
   // Pillar 2: HCIS (High Commission for Industrial Security)
   hcisClassApproved: boolean;
@@ -209,6 +210,14 @@ export interface KsaVendorCompliance {
   ncaEccCertified: boolean;
   ksaDataSovereignty: boolean; // In-Kingdom Data Center Hosting
   ncaEccPass: boolean;
+
+  // Pillar 5: Saudi Vision 2030 & ESG / Green Mining Standards (SGI Mandate)
+  esgPueRating?: number; // Target PUE < 1.25 for desert data centers
+  esgEwasteCertified?: boolean; // NCEC certified circular take-back
+  esgCarbonOffsetPledge?: boolean; // Scope 2 zero carbon commitment in KSA
+  esgHarshEnvironmentRating?: string; // e.g. IP66 / NEMA 4X
+  esgScorePercent?: number; // Overall ESG Score (0-100)
+  esgPass?: boolean;
 
   // Strict Binary Pass/Fail Logic Gate Status
   overallGateStatus: "APPROVE_PURCHASE_ORDER" | "FLAG_AND_BLOCK_PO";
@@ -226,7 +235,72 @@ export interface KsaProjectConfig {
   includesWireless: boolean;
   includesCloudSoftware: boolean;
   minLcgpaThreshold: number; // e.g., 35%
+  enforceGreenMiningEsg?: boolean; // SGI Saudi Green Initiative Mandate
 }
 
-export type BackgroundTheme = "glowing-red" | "dark-obsidian" | "light-porcelain";
+export type BackgroundTheme = "white-glow" | "dark-obsidian" | "light-porcelain" | "glowing-red";
+
+// Local State-Based Risk Assessment Threshold Alert Notification System
+export type RiskAlertSeverity = "critical" | "warning" | "info";
+
+export interface RiskAlertNotification {
+  id: string;
+  vendorKey: string;
+  vendorName: string;
+  severity: RiskAlertSeverity;
+  title: string;
+  message: string;
+  metricKey?: string;
+  metricName?: string;
+  oldScore: number;
+  newScore: number;
+  threshold: number;
+  timestamp: string;
+  breachReason: string;
+  flaggedMetrics?: string[];
+  dismissed?: boolean;
+}
+
+// Outlook Mail Integration & Approval Notification Types
+export type OutlookConnectionMethod = "oauth" | "graph_token" | "outlook_web" | "desktop_client";
+
+export interface OutlookAccountProfile {
+  isConnected: boolean;
+  email: string;
+  displayName: string;
+  jobTitle?: string;
+  tenantId?: string;
+  connectedAt?: string;
+  method: OutlookConnectionMethod;
+  accessToken?: string;
+}
+
+export interface OutlookApprovalEmailPayload {
+  toRecipients: string[];
+  ccRecipients?: string[];
+  subject: string;
+  bodyHtml: string;
+  bodyText: string;
+  importance?: "low" | "normal" | "high";
+  awardedVendorKey: string;
+  awardedVendorName: string;
+  poReference: string;
+  totalAmountFormatted: string;
+  currency: CurrencyCode;
+  signoffType: "single" | "multi_tier" | "override";
+  signees: Array<{ role: string; name: string; timestamp: string }>;
+}
+
+export interface OutlookDispatchRecord {
+  id: string;
+  timestamp: string;
+  recipientCount: number;
+  recipients: string[];
+  subject: string;
+  vendorName: string;
+  poReference: string;
+  method: OutlookConnectionMethod;
+  status: "sent" | "opened_client" | "failed";
+  errorMessage?: string;
+}
 
